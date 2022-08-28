@@ -4,6 +4,7 @@ using CUDA
 using CUDA.CUFFT
 using DifferentialEquations
 using Plots
+# using ProfileView
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
@@ -50,6 +51,10 @@ Mz_pad = CUDA.zeros(nx * 2, ny * 2, nz * 2);
 Hx_pad = CUDA.zeros(nx * 2, ny * 2, nz * 2);
 Hy_pad = CUDA.zeros(nx * 2, ny * 2, nz * 2);
 Hz_pad = CUDA.zeros(nx * 2, ny * 2, nz * 2);
+
+# p = plan_rfft(Mx_pad)
+# ip = plan_irfft(Mx_pad,)
+
 
 mx_avg = CUDA.zeros(floor(Int, timesteps / 1000))
 my_avg = CUDA.zeros(floor(Int, timesteps / 1000))
@@ -102,18 +107,17 @@ Kyy = CuArray(Kyy);
 Kyz = CuArray(Kyz);
 Kzz = CuArray(Kzz);
 
-Kxx_fft = fft(Kxx); # fast fourier transform of demag tensor
-Kxy_fft = fft(Kxy); # need to be done only one time
-Kxz_fft = fft(Kxz);
-Kyy_fft = fft(Kyy);
-Kyz_fft = fft(Kyz);
-Kzz_fft = fft(Kzz);
-# Kxx_fft = CuArray(Kxx_fft);
-# Kxy_fft = CuArray(Kxy_fft);
-# Kxz_fft = CuArray(Kxz_fft);
-# Kyy_fft = CuArray(Kyy_fft);
-# Kyz_fft = CuArray(Kyz_fft);
-# Kzz_fft = CuArray(Kzz_fft);
+Kxx_fft = rfft(Kxx); # fast fourier transform of demag tensor
+Kxy_fft = rfft(Kxy); # need to be done only one time
+Kxz_fft = rfft(Kxz);
+Kyy_fft = rfft(Kyy);
+Kyz_fft = rfft(Kyz);
+Kzz_fft = rfft(Kzz);
+
+plan = plan_rfft(Kxx);
+iplan = plan_irfft(Kxx_fft, 2 * nx);
+
+
 Hx_exch = CUDA.zeros(nx, ny, nz);
 Hy_exch = CUDA.zeros(nx, ny, nz);
 Hz_exch = CUDA.zeros(nx, ny, nz);
@@ -144,18 +148,34 @@ function LLG_loop!(dm, m0, p, t)
     My = m0[2, :, :, :]
     Mz = m0[3, :, :, :]
 
+    fill!(Mx_pad, 0)
+    fill!(My_pad, 0)
+    fill!(Mz_pad, 0)
 
     Mx_pad[1:nx, 1:ny, 1:nz] = Mx
     My_pad[1:nx, 1:ny, 1:nz] = My
     Mz_pad[1:nx, 1:ny, 1:nz] = Mz
 
-    # Mx[end+nx, end+ny, end+nz] = 0 # zero padding
-    # My[end+nx, end+ny, end+nz] = 0
-    # Mz[end+nx, end+ny, end+nz] = 0
+    # Hx_pad = irfft(rfft(Mx_pad) .* Kxx_fft + rfft(My_pad) .* Kxy_fft + rfft(Mz_pad) .* Kxz_fft, 2 * nx) # calc demag field with fft
+    Hx_pad = iplan * (
+        (plan * Mx_pad) .* Kxx_fft +
+        (plan * My_pad) .* Kxy_fft +
+        (plan * Mz_pad) .* Kxz_fft
+    ) # calc demag field with fft
 
-    Hx_pad = ifft(fft(Mx_pad) .* Kxx_fft + fft(My_pad) .* Kxy_fft + fft(Mz_pad) .* Kxz_fft) # calc demag field with fft
-    Hy_pad = ifft(fft(Mx_pad) .* Kxy_fft + fft(My_pad) .* Kyy_fft + fft(Mz_pad) .* Kyz_fft)
-    Hz_pad = ifft(fft(Mx_pad) .* Kxz_fft + fft(My_pad) .* Kyz_fft + fft(Mz_pad) .* Kzz_fft)
+    Hy_pad = iplan * (
+        (plan * Mx_pad) .* Kxy_fft +
+        (plan * My_pad) .* Kyy_fft +
+        (plan * Mz_pad) .* Kyz_fft
+    )
+
+    Hz_pad = iplan * (
+        (plan * Mx_pad) .* Kxz_fft +
+        (plan * My_pad) .* Kyz_fft +
+        (plan * Mz_pad) .* Kzz_fft
+    )
+    # Hy_pad = irfft(rfft(Mx_pad) .* Kxy_fft + rfft(My_pad) .* Kyy_fft + rfft(Mz_pad) .* Kyz_fft, 2 * nx)
+    # Hz_pad = irfft(rfft(Mx_pad) .* Kxz_fft + rfft(My_pad) .* Kyz_fft + rfft(Mz_pad) .* Kzz_fft, 2 * nx)
     Hx = real(Hx_pad[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
     Hy = real(Hy_pad[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
     Hz = real(Hz_pad[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
@@ -259,11 +279,18 @@ p = ()
 
 
 prob = ODEProblem(LLG_loop!, m0, tspan, p)
+# @profview sol = solve(prob, BS3(), progress=true, progress_steps=100)
 sol = solve(prob, BS3(), progress=true, progress_steps=100)
 
-mx_vals = sol(t_range)[1, 1:nx, 1:ny, 1:nz, :]
-my_vals = sol(t_range)[2, 1:nx, 1:ny, 1:nz, :]
-mz_vals = sol(t_range)[3, 1:nx, 1:ny, 1:nz, :]
+
+
+# The '...' is absolutely necessary here. It's called splatting and I don't know 
+# how it works.
+cpu_sol = cat([Array(x) for x in sol.u]...,dims=5)
+
+mx_vals = cpu_sol[1, 1:nx, 1:ny, 1:nz, :]
+my_vals = cpu_sol[2, 1:nx, 1:ny, 1:nz, :]
+mz_vals = cpu_sol[3, 1:nx, 1:ny, 1:nz, :]
 
 mx_avg = mean(mx_vals, dims=[1, 2, 3])[1, 1, 1, :]
 my_avg = mean(my_vals, dims=[1, 2, 3])[1, 1, 1, :]
@@ -271,7 +298,7 @@ mz_avg = mean(mz_vals, dims=[1, 2, 3])[1, 1, 1, :]
 
 m_norm = sqrt.(mx_avg .^ 2 + my_avg .^ 2 + mz_avg .^ 2)
 
-plot(t_range, mx_avg, label="mx")
-plot!(t_range, my_avg, label="my", color="black")
-plot!(t_range, mz_avg, label="mz")
-plot!(t_range, m_norm, label="norm")
+plot(sol.t, mx_avg, label="mx")
+plot!(sol.t, my_avg, label="my", color="black")
+plot!(sol.t, mz_avg, label="mz")
+plot!(sol.t, m_norm, label="norm")
