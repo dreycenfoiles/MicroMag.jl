@@ -52,9 +52,6 @@ Hx_pad = CUDA.zeros(nx * 2, ny * 2, nz * 2);
 Hy_pad = CUDA.zeros(nx * 2, ny * 2, nz * 2);
 Hz_pad = CUDA.zeros(nx * 2, ny * 2, nz * 2);
 
-# p = plan_rfft(Mx_pad)
-# ip = plan_irfft(Mx_pad,)
-
 
 mx_avg = CUDA.zeros(floor(Int, timesteps / 1000))
 my_avg = CUDA.zeros(floor(Int, timesteps / 1000))
@@ -68,54 +65,8 @@ Kyz = zeros(nx * 2, ny * 2, nz * 2);
 Kzz = zeros(nx * 2, ny * 2, nz * 2);
 prefactor = 1 / 4 / 3.14159265;
 
-for K = -nz+1:nz-1 # Calculation of Demag tensor
-    for J = -ny+1:ny-1
-        for I = -nx+1:nx-1
-            if I == 0 && J == 0 && K == 0
-                continue
-            end
-            L = I + nx # shift the indices, b/c no negative index allowed in MATLAB
-            M = J + ny
-            N = K + nz
-            for i = 0:1 # helper indices
-                for j = 0:1
-                    for k = 0:1
-                        r = sqrt((I + i - 0.5) * (I + i - 0.5) * dd * dd + (J + j - 0.5) * (J + j - 0.5) * dd * dd + (K + k - 0.5) * (K + k - 0.5) * dd * dd)
-                        Kxx[L, M, N] += (-1) .^ (i + j + k) * atan((K + k - 0.5) * (J + j - 0.5) * dd / r / (I + i - 0.5))
-                        Kxy[L, M, N] += (-1) .^ (i + j + k) * log((K + k - 0.5) * dd + r)
-                        Kxz[L, M, N] += (-1) .^ (i + j + k) * log((J + j - 0.5) * dd + r)
-                        Kyy[L, M, N] += (-1) .^ (i + j + k) * atan((I + i - 0.5) * (K + k - 0.5) * dd / r / (J + j - 0.5))
-                        Kyz[L, M, N] += (-1) .^ (i + j + k) * log((I + i - 0.5) * dd + r)
-                        Kzz[L, M, N] += (-1) .^ (i + j + k) * atan((J + j - 0.5) * (I + i - 0.5) * dd / r / (K + k - 0.5))
-                    end
-                end
-            end
-            Kxx[L, M, N] *= prefactor
-            Kxy[L, M, N] *= -prefactor
-            Kxz[L, M, N] *= -prefactor
-            Kyy[L, M, N] *= prefactor
-            Kyz[L, M, N] *= -prefactor
-            Kzz[L, M, N] *= prefactor
-        end
-    end
-end # calculation of demag tensor done
+include("Demag.jl")
 
-Kxx = CuArray(Kxx);
-Kxy = CuArray(Kxy);
-Kxz = CuArray(Kxz);
-Kyy = CuArray(Kyy);
-Kyz = CuArray(Kyz);
-Kzz = CuArray(Kzz);
-
-Kxx_fft = rfft(Kxx); # fast fourier transform of demag tensor
-Kxy_fft = rfft(Kxy); # need to be done only one time
-Kxz_fft = rfft(Kxz);
-Kyy_fft = rfft(Kyy);
-Kyz_fft = rfft(Kyz);
-Kzz_fft = rfft(Kzz);
-
-plan = plan_rfft(Kxx);
-iplan = plan_irfft(Kxx_fft, 2 * nx);
 
 
 Hx_exch = CUDA.zeros(nx, ny, nz);
