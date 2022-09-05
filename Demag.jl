@@ -4,7 +4,7 @@ for K = -nz+1:nz-1 # Calculation of Demag tensor
             if I == 0 && J == 0 && K == 0
                 continue
             end
-            L = I + nx # shift the indices, b/c no negative index allowed in MATLAB
+            L = I + nx # shift the indices, b/c no negative index allowed in Julia
             M = J + ny
             N = K + nz
             for i = 0:1 # helper indices
@@ -38,7 +38,7 @@ Kyz = CuArray(Kyz);
 Kzz = CuArray(Kzz);
 
 Kxx_fft = rfft(Kxx); # fast fourier transform of demag tensor
-Kxy_fft = rfft(Kxy); # need to be done only one time
+Kxy_fft = rfft(Kxy); # needs to be done only one time
 Kxz_fft = rfft(Kxz);
 Kyy_fft = rfft(Kyy);
 Kyz_fft = rfft(Kyz);
