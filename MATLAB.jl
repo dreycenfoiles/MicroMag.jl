@@ -25,28 +25,28 @@ exch = 2 * exchConstant / mu_0 / Ms / Ms;
 prefactor1 = (-0.221) * dt / (1 + alpha * alpha);
 prefactor2 = prefactor1 * alpha / Ms;
 
-Mx_pad = CUDA.zeros(Float64, nx * 2, ny * 2, nz * 2);
-My_pad = CUDA.zeros(Float64, nx * 2, ny * 2, nz * 2);
-Mz_pad = CUDA.zeros(Float64, nx * 2, ny * 2, nz * 2);
+Mx_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+My_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+Mz_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 
-Mx_fft = CUDA.zeros(ComplexF64, nx + 1, ny * 2, nz * 2);
-My_fft = CUDA.zeros(ComplexF64, nx + 1, ny * 2, nz * 2)
-Mz_fft = CUDA.zeros(ComplexF64, nx + 1, ny * 2, nz * 2)
+Mx_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2);
+My_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
+Mz_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
 
-Hx_pad = CUDA.zeros(Float64, nx * 2, ny * 2, nz * 2);
-Hy_pad = CUDA.zeros(Float64, nx * 2, ny * 2, nz * 2);
-Hz_pad = CUDA.zeros(Float64, nx * 2, ny * 2, nz * 2);
+Hx_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+Hy_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+Hz_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 
-MxHx = CUDA.zeros(Float64, nx, ny, nz);
-MxHy = CUDA.zeros(Float64, nx, ny, nz);
-MxHz = CUDA.zeros(Float64, nx, ny, nz);
+MxHx = CUDA.zeros(Float32, nx, ny, nz);
+MxHy = CUDA.zeros(Float32, nx, ny, nz);
+MxHz = CUDA.zeros(Float32, nx, ny, nz);
 
-Kxx = zeros(Float64, nx * 2, ny * 2, nz * 2); # Initialization of demagnetization tensor
-Kxy = zeros(Float64, nx * 2, ny * 2, nz * 2);
-Kxz = zeros(Float64, nx * 2, ny * 2, nz * 2);
-Kyy = zeros(Float64, nx * 2, ny * 2, nz * 2);
-Kyz = zeros(Float64, nx * 2, ny * 2, nz * 2);
-Kzz = zeros(Float64, nx * 2, ny * 2, nz * 2);
+Kxx = zeros(Float32, nx * 2, ny * 2, nz * 2); # Initialization of demagnetization tensor
+Kxy = zeros(Float32, nx * 2, ny * 2, nz * 2);
+Kxz = zeros(Float32, nx * 2, ny * 2, nz * 2);
+Kyy = zeros(Float32, nx * 2, ny * 2, nz * 2);
+Kyz = zeros(Float32, nx * 2, ny * 2, nz * 2);
+Kzz = zeros(Float32, nx * 2, ny * 2, nz * 2);
 prefactor = 1 / 4 / pi;
 
 include("Demag.jl")
@@ -54,11 +54,6 @@ include("Exchange.jl")
 
 
 H_exch = CUDA.zeros(3, nx, ny, nz);
-
-H0 = CUDA.zeros(3, nx, ny, nz);
-H1 = CUDA.zeros(3, nx, ny, nz);
-H2 = CUDA.zeros(3, nx, ny, nz);
-H3 = CUDA.zeros(3, nx, ny, nz);
 
 function LLG_loop!(dm, m0, p, t)
 
@@ -113,9 +108,9 @@ function LLG_loop!(dm, m0, p, t)
     Hy_exch = @view H_exch[2, :, :, :]
     Hz_exch = @view H_exch[3, :, :, :]
 
-    Hx += Hx_exch
-    Hy += Hy_exch
-    Hz += Hz_exch
+    Hx .+= Hx_exch
+    Hy .+= Hy_exch
+    Hz .+= Hz_exch
 
     if t < 4000
         Hx .+= 100 # apply a saturation field to get S-state
@@ -143,7 +138,7 @@ function LLG_loop!(dm, m0, p, t)
 
 end
 
-end_point = 200000
+end_point = 300000
 tspan = (0, end_point)
 t_range = range(0, end_point, length=300)
 
@@ -154,9 +149,9 @@ p = ()
 
 
 prob = ODEProblem(LLG_loop!, m0, tspan, p)
-# @profview sol = solve(prob, OwrenZen3(), progress=true, progress_steps=100)
-@profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
-# sol = solve(prob, BS3(), progress=true, progress_steps=200);
+# @profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
+# @profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
+sol = solve(prob, BS3(), progress=true, progress_steps=300);
 
 
 # The '...' is absolutely necessary here. It's called splatting and I don't know 
