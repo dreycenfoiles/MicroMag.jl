@@ -33,9 +33,11 @@ Mx_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2);
 My_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
 Mz_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
 
-Hx_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
-Hy_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
-Hz_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+Hx_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+Hy_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+Hz_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+
+H_eff = CUDA.zeros(Float32, 3, nx, ny, nz);
 
 MxHx = CUDA.zeros(Float32, nx, ny, nz);
 MxHy = CUDA.zeros(Float32, nx, ny, nz);
@@ -69,8 +71,6 @@ function LLG_loop!(dm, m0, p, t)
     fill!(My_pad, 0)
     fill!(Mz_pad, 0)
 
-    fill!(H_exch, 0)
-
     Mx_pad[1:nx, 1:ny, 1:nz] .= Mx
     My_pad[1:nx, 1:ny, 1:nz] .= My
     Mz_pad[1:nx, 1:ny, 1:nz] .= Mz
@@ -79,58 +79,56 @@ function LLG_loop!(dm, m0, p, t)
     mul!(My_fft, plan, My_pad)
     mul!(Mz_fft, plan, Mz_pad)
 
-    mul!(Hx_pad, iplan,
+    mul!(Hx_demag, iplan,
         Mx_fft .* Kxx_fft .+
         My_fft .* Kxy_fft .+
         Mz_fft .* Kxz_fft
     ) # calc demag field with fft
 
-    mul!(Hy_pad, iplan,
+    mul!(Hy_demag, iplan,
         Mx_fft .* Kxy_fft .+
         My_fft .* Kyy_fft .+
         Mz_fft .* Kyz_fft
     )
 
-    mul!(Hz_pad, iplan,
+    mul!(Hz_demag, iplan,
         Mx_fft .* Kxz_fft .+
         My_fft .* Kyz_fft .+
         Mz_fft .* Kzz_fft
     )
 
+    Hx_eff = @views H_eff[1, :, :, :]
+    Hy_eff = @views H_eff[2, :, :, :]
+    Hz_eff = @views H_eff[3, :, :, :]
 
-    Hx = real(Hx_pad[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
-    Hy = real(Hy_pad[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
-    Hz = real(Hz_pad[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
+    Hx_eff .= real(Hx_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
+    Hy_eff .= real(Hy_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
+    Hz_eff .= real(Hz_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
 
     # Exchange!(H_exch, m0, exch, H0, H1, H2, H3, dd)
     Exchange!(H_exch, m0, exch, dd, dd, dd)
-    Hx_exch = @view H_exch[1, :, :, :]
-    Hy_exch = @view H_exch[2, :, :, :]
-    Hz_exch = @view H_exch[3, :, :, :]
 
-    Hx .+= Hx_exch
-    Hy .+= Hy_exch
-    Hz .+= Hz_exch
+    H_eff .+= H_exch
 
     if t < 4000
-        Hx .+= 100 # apply a saturation field to get S-state
-        Hy .+= 100
-        Hz .+= 100
+        Hx_eff .+= 100 # apply a saturation field to get S-state
+        Hy_eff .+= 100
+        Hz_eff .+= 100
     elseif t < 6000
-        Hx .+= (6000 - t) / 20 # gradually diminish the field
-        Hx .+= (6000 - t) / 20
-        Hx .+= (6000 - t) / 20
+        Hx_eff .+= (6000 - t) / 20 # gradually diminish the field
+        Hx_eff .+= (6000 - t) / 20
+        Hx_eff .+= (6000 - t) / 20
     elseif t > 50000
-        Hx .+= -19.576 # apply the reverse field
-        Hy .+= +3.422
+        Hx_eff .+= -19.576 # apply the reverse field
+        Hy_eff .+= +3.422
         alpha = 0.02
         prefactor1 = (-0.221) * dt / (1 + alpha * alpha)
         prefactor2 = prefactor1 * alpha / Ms
     end
     # apply LLG equation
-    @. MxHx = My * Hz - Mz * Hy # = M cross H
-    @. MxHy = Mz * Hx - Mx * Hz
-    @. MxHz = Mx * Hy - My * Hx
+    @. MxHx = My * Hz_eff - Mz * Hy_eff # = M cross H
+    @. MxHy = Mz * Hx_eff - Mx * Hz_eff
+    @. MxHz = Mx * Hy_eff - My * Hx_eff
 
     @. dm[1, :, :, :] = prefactor1 * MxHx + prefactor2 * (My * MxHz - Mz * MxHy)
     @. dm[2, :, :, :] = prefactor1 * MxHy + prefactor2 * (Mz * MxHx - Mx * MxHz)
@@ -138,7 +136,7 @@ function LLG_loop!(dm, m0, p, t)
 
 end
 
-end_point = 300000
+end_point = 200000
 tspan = (0, end_point)
 t_range = range(0, end_point, length=300)
 
@@ -149,9 +147,9 @@ p = ()
 
 
 prob = ODEProblem(LLG_loop!, m0, tspan, p)
-# @profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
-# @profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
-sol = solve(prob, BS3(), progress=true, progress_steps=300);
+@profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
+@profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
+# sol = solve(prob, BS3(), progress=true, progress_steps=300);
 
 
 # The '...' is absolutely necessary here. It's called splatting and I don't know 
@@ -169,6 +167,6 @@ mz_avg = mean(mz_vals, dims=[1, 2, 3])[1, 1, 1, :]
 m_norm = sqrt.(mx_avg .^ 2 + my_avg .^ 2 + mz_avg .^ 2)
 
 plot(sol.t, mx_avg, label="mx")
-plot!(sol.t, my_avg, label="my", color="black")
+plot!(sol.t, my_avg, label="my", color="orange")
 plot!(sol.t, mz_avg, label="mz")
 plot!(sol.t, m_norm, label="norm")
