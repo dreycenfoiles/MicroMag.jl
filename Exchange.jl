@@ -44,28 +44,4 @@ function Exchange!(H_exch, M, exch, dx, dy, dz)
     return
 end
 
-
-# function Exchange!(H_exch, M, exch, H0, H1, H2, H3, dd)
-#     # calculation of exchange field
-
-#     fill!(H0, 0)
-#     fill!(H1, 0)
-#     fill!(H2, 0)
-#     fill!(H3, 0)
-
-#     H0[:, 2:end, :, :] .= @views M[:, 1:end-1, :, :]
-#     H0[:, 1, :, :] .= @views H0[:, 2, :, :]
-#     H1[:, 1:end-1, :, :] .= @views M[:, 2:end, :, :]
-#     H1[:, end, :, :] .= @views H1[:, end-1, :, :]
-
-#     H2[:, :, 2:end, :] .= @views M[:, :, 1:end-1, :]
-#     H2[:, :, 1, :] .= @views H2[:, :, 2, :]
-#     H3[:, :, 1:end-1, :] .= @views M[:, :, 2:end, :]
-#     H3[:, :, end, :] .= @views H3[:, :, end-1, :]
-
-#     @. @views H_exch .= exch / dd / dd * (H0 + H1 + H2 + H3 - 4 * M)
-
-# end
-
-
     
