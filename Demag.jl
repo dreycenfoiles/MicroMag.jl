@@ -10,13 +10,15 @@ for K = -nz+1:nz-1 # Calculation of Demag tensor
             for i = 0:1 # helper indices
                 for j = 0:1
                     for k = 0:1
-                        r = sqrt((I + i - 0.5) * (I + i - 0.5) * dd * dd + (J + j - 0.5) * (J + j - 0.5) * dd * dd + (K + k - 0.5) * (K + k - 0.5) * dd * dd)
-                        Kxx[L, M, N] += (-1) .^ (i + j + k) * atan((K + k - 0.5) * (J + j - 0.5) * dd / r / (I + i - 0.5))
-                        Kxy[L, M, N] += (-1) .^ (i + j + k) * log((K + k - 0.5) * dd + r)
-                        Kxz[L, M, N] += (-1) .^ (i + j + k) * log((J + j - 0.5) * dd + r)
-                        Kyy[L, M, N] += (-1) .^ (i + j + k) * atan((I + i - 0.5) * (K + k - 0.5) * dd / r / (J + j - 0.5))
-                        Kyz[L, M, N] += (-1) .^ (i + j + k) * log((I + i - 0.5) * dd + r)
-                        Kzz[L, M, N] += (-1) .^ (i + j + k) * atan((J + j - 0.5) * (I + i - 0.5) * dd / r / (K + k - 0.5))
+                        r = sqrt((I + i - 0.5) * (I + i - 0.5) * dx * dx + (J + j - 0.5) * (J + j - 0.5) * dy * dy + (K + k - 0.5) * (K + k - 0.5) * dz * dz)
+
+                        Kxx[L, M, N] += (-1) .^ (i + j + k) * atan((K + k - 0.5) * (J + j - 0.5)*dy*dz / r / ((I + i - 0.5)*dx))
+                        Kyy[L, M, N] += (-1) .^ (i + j + k) * atan((I + i - 0.5) * (K + k - 0.5)*dx*dz / r / ((J + j - 0.5)*dy))
+                        Kzz[L, M, N] += (-1) .^ (i + j + k) * atan((J + j - 0.5) * (I + i - 0.5)*dy*dx / r / ((K + k - 0.5)*dz))
+
+                        Kxy[L, M, N] += (-1) .^ (i + j + k) * log((K + k - 0.5) * dz + r)
+                        Kxz[L, M, N] += (-1) .^ (i + j + k) * log((J + j - 0.5) * dy + r)
+                        Kyz[L, M, N] += (-1) .^ (i + j + k) * log((I + i - 0.5) * dx + r)
                     end
                 end
             end
