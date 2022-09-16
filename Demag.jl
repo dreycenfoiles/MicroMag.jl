@@ -32,6 +32,43 @@ for K = -nz+1:nz-1 # Calculation of Demag tensor
     end
 end # calculation of demag tensor done
 
+
+
+Kxx = zeros(2*nx,2*ny,2*nz)
+
+function newell_f(x,y,z)
+
+    R = sqrt(x^2 + y^2 + z^2)
+
+    return .5 * y * (z^2 - x^2) * asinh(y / sqrt(x^2 + z^2)) + 
+           .5 * z * (y^2 - x^2) * asinh(z / sqrt(x^2 + y^2)) - 
+           x*y*z * atan(y*z/x/R) - 1/6 * (2*x^2 - y^2 - z^2) * R 
+end
+
+
+function newell_g(x,y,z)
+    R = sqrt(x^2 + y^2 + z^2)
+    
+    return x*y*z * asinh(z / sqrt(y^2 + z^2)) + 
+           1/6 * y * (3*z^2 - y^2) * asinh(x/sqrt(y^2 + z^2)) + 
+           1/6 * x * (3*z^2 - x^2) * asinh(y/sqrt(x^2 + z^2)) - 
+           1/2 * y^2*z * atan(x*z/y/R) -
+           1/2 * x^2*z * atan(y*z/x/R) - 
+           1/6 * z^3 * atan(x*y/z/R) - 
+           x*y*R/3
+end
+
+
+function Demag_Tensor(nx,ny,nz,dx,dy,dz)
+
+    A = [[dx, 0, 0], [0, dy, 0], [0, 0, dz]]
+    B = [[dx, dy, 0], [dx, 0, dz], [0, dy, dz]]
+    C = [[dx, dy, dz]]
+    for i in CartesianIndices((nx,ny,nz))
+        
+    
+
+
 Kxx = CuArray(Kxx);
 Kxy = CuArray(Kxy);
 Kxz = CuArray(Kxz);
