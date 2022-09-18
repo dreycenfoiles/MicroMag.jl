@@ -15,17 +15,12 @@ CUDA.allowscalar(false)
 nx = 166; # number of cells on x direction
 ny = 42;
 nz = 1;
-dx = 500/nx; # cell volume = dd x dd x dd
+dx = 3; # cell volume = dd x dd x dd
 dy = 3; # cell volume = dd x dd x dd
 dz = 3; # cell volume = dd x dd x dd
-dt = 5E-6; # timestep in nanoseconds
-alpha = 0.5; # damping constant to relax system to S-state
-exchConstant = 1.3E-11 * 1E18; # nanometer/nanosecond units
-mu_0 = 1.256636; # vacuum permeability, = 4 * pi / 10
-Ms = 800; # saturation magnetization
-exch = 2 * exchConstant / mu_0 / Ms / Ms;
-prefactor1 = (-0.221) * dt / (1 + alpha * alpha);
-prefactor2 = prefactor1 * alpha / Ms;
+
+const mu_0 = 1.256636; # vacuum permeability, = 4 * pi / 10
+const dt = 5E-6; # timestep in nanosecond
 
 Mx_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 My_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
@@ -34,6 +29,9 @@ Mz_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 Mx_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2);
 My_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
 Mz_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
+
+plan = plan_rfft(Mx_pad);
+iplan = plan_irfft(Mx_fft, 2 * nx);
 
 Hx_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 Hy_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
@@ -45,13 +43,6 @@ MxHx = CUDA.zeros(Float32, nx, ny, nz);
 MxHy = CUDA.zeros(Float32, nx, ny, nz);
 MxHz = CUDA.zeros(Float32, nx, ny, nz);
 
-Kxx = zeros(Float32, nx * 2, ny * 2, nz * 2); # Initialization of demagnetization tensor
-Kxy = zeros(Float32, nx * 2, ny * 2, nz * 2);
-Kxz = zeros(Float32, nx * 2, ny * 2, nz * 2);
-Kyy = zeros(Float32, nx * 2, ny * 2, nz * 2);
-Kyz = zeros(Float32, nx * 2, ny * 2, nz * 2);
-Kzz = zeros(Float32, nx * 2, ny * 2, nz * 2);
-prefactor = 1 / 4 / pi;
 
 include("Demag.jl")
 include("Exchange.jl")
@@ -61,9 +52,10 @@ H_exch = CUDA.zeros(3, nx, ny, nz);
 
 function LLG_loop!(dm, m0, p, t)
 
-    global alpha
-    global prefactor1
-    global prefactor2
+    Ms, A, alpha = p
+
+    prefactor1 = (-0.221) * dt / (1 + alpha * alpha)
+    prefactor2 = prefactor1 * alpha / Ms
 
     Mx = @views m0[1, :, :, :]
     My = @views m0[2, :, :, :]
@@ -141,12 +133,18 @@ end
 
 end_point = 200000
 tspan = (0, end_point)
-t_range = range(0, end_point, length=300)
+
+alpha = 0.5; # damping constant to relax system to S-state
+A = 1.3E-11 * 1E18; # nanometer/nanosecond units
+Ms = 800; # saturation magnetization
+exch = 2 * A / mu_0 / Ms / Ms;
+p = (Ms, A, alpha)
 
 m0 = CUDA.zeros(Float32, 3, nx, ny, nz)
 m0[1, :, :, :] .= Ms
 
-p = ()
+
+
 
 
 prob = ODEProblem(LLG_loop!, m0, tspan, p)
