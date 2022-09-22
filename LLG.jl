@@ -19,8 +19,8 @@ dx = 3; # cell volume = dd x dd x dd
 dy = 3; # cell volume = dd x dd x dd
 dz = 3; # cell volume = dd x dd x dd
 
-const mu_0 = 1.256636; # vacuum permeability, = 4 * pi / 10
-const dt = 5E-6; # timestep in nanosecond
+mu_0 = pi*4e-7/1e9; # vacuum permeability, = 4 * pi / 10
+dt = 1e-4; # timestep in nanosecond
 
 Mx_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 My_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
@@ -47,6 +47,8 @@ MxHz = CUDA.zeros(Float32, nx, ny, nz);
 include("Demag.jl")
 include("Exchange.jl")
 
+Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft = Demag_Kernel(nx, ny, nz, dx, dy, dz)
+
 
 H_exch = CUDA.zeros(3, nx, ny, nz);
 
@@ -54,8 +56,17 @@ function LLG_loop!(dm, m0, p, t)
 
     Ms, A, alpha = p
 
-    prefactor1 = (-0.221) * dt / (1 + alpha * alpha)
+    prefactor1 = -2.221e5 * dt / (1 + alpha * alpha)
     prefactor2 = prefactor1 * alpha / Ms
+    exch = 2 * A / mu_0 / Ms / Ms
+
+    Hx_eff = @views H_eff[1, :, :, :]
+    Hy_eff = @views H_eff[2, :, :, :]
+    Hz_eff = @views H_eff[3, :, :, :]
+
+    #################
+    ## Demag Field ##
+    #################
 
     Mx = @views m0[1, :, :, :]
     My = @views m0[2, :, :, :]
@@ -91,33 +102,27 @@ function LLG_loop!(dm, m0, p, t)
         Mz_fft .* Kzz_fft
     )
 
-    Hx_eff = @views H_eff[1, :, :, :]
-    Hy_eff = @views H_eff[2, :, :, :]
-    Hz_eff = @views H_eff[3, :, :, :]
-
     Hx_eff .= real(Hx_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
     Hy_eff .= real(Hy_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
     Hz_eff .= real(Hz_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
 
-    Exchange!(H_exch, m0, exch, dx, dy, dz)
+    ####################
+    ## Exchange Field ##
+    ####################
 
-    synchronize()
+    Exchange!(H_exch, m0, exch, dx, dy, dz)
 
     H_eff .+= H_exch
 
-    if t < 4000
-        Hx_eff .+= 100 # apply a saturation field to get S-state
-        Hy_eff .+= 100
-        Hz_eff .+= 100
-    elseif t < 6000
-        Hx_eff .+= (6000 - t) / 20 # gradually diminish the field
-        Hx_eff .+= (6000 - t) / 20
-        Hx_eff .+= (6000 - t) / 20
-    elseif t > 50000
-        Hx_eff .+= -19.576 # apply the reverse field
-        Hy_eff .+= +3.422
+    if t < 500
+        Hx_eff .+= .1/1e18/mu_0 # apply a saturation field to get S-state
+        Hy_eff .+= .1/1e18/mu_0
+        Hz_eff .+= .1/1e18/mu_0
+    elseif t > 2500
+        Hx_eff .+= -24.6e-3/1e18/mu_0 # apply the reverse field
+        Hy_eff .+= +4.3e-3/1e18/mu_0
         alpha = 0.02
-        prefactor1 = (-0.221) * dt / (1 + alpha * alpha)
+        prefactor1 = -2.221e5 * dt / (1 + alpha * alpha)
         prefactor2 = prefactor1 * alpha / Ms
     end
     # apply LLG equation
@@ -125,36 +130,50 @@ function LLG_loop!(dm, m0, p, t)
     @. MxHy = Mz * Hx_eff - Mx * Hz_eff
     @. MxHz = Mx * Hy_eff - My * Hx_eff
 
+    # @show t * dt
+
     @. dm[1, :, :, :] = prefactor1 * MxHx + prefactor2 * (My * MxHz - Mz * MxHy)
     @. dm[2, :, :, :] = prefactor1 * MxHy + prefactor2 * (Mz * MxHx - Mx * MxHz)
     @. dm[3, :, :, :] = prefactor1 * MxHz + prefactor2 * (Mx * MxHy - My * MxHx)
 
+    # @show dm[1, :, :, :]
+    nothing
+
 end
 
-end_point = 200000
+# function check_normalize!(m,Ms)
+#     nc,nx,ny,nz = size(m)
+
+#     for index in CartesianIndices((nx,ny,nz))
+#         current_m = m[:, index]
+#         if norm
+
+#         end
+
+#     end
+# end
+
+
+end_point = 10000
 tspan = (0, end_point)
 
 alpha = 0.5; # damping constant to relax system to S-state
-A = 1.3E-11 * 1E18; # nanometer/nanosecond units
-Ms = 800; # saturation magnetization
-exch = 2 * A / mu_0 / Ms / Ms;
+A = 1.3E-11/1e9; # nanometer/nanosecond units
+Ms = 8e5/1e9; # saturation magnetization
 p = (Ms, A, alpha)
 
 m0 = CUDA.zeros(Float32, 3, nx, ny, nz)
-m0[1, :, :, :] .= Ms
+m0[2, :, :, :] .= Ms
 
 
+prob = ODEProblem(LLG_loop!, m0, tspan, p);
+SS = TerminateSteadyState(1e-5, 1e-5)
+# saveat=2000 if memory becomes an issue
+sol = solve(prob, BS3(), progress=true, progress_steps=500, abstol=1e-10);
 
 
-
-prob = ODEProblem(LLG_loop!, m0, tspan, p)
-# @profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
-# @profview sol = solve(prob, BS3(), progress=true, progress_steps=300)
-sol = solve(prob, OwrenZen3(), progress=true, progress_steps=300, saveat=2000);
-
-
-# The '...' is absolutely necessary here. It's called splatting and I don't know 
-# how it works.
+# # The '...' is absolutely necessary here. It's called splatting and I don't know 
+# # how it works.
 cpu_sol = cat([Array(x) for x in sol.u]..., dims=5)
 
 mx_vals = cpu_sol[1, 1:nx, 1:ny, 1:nz, :]
