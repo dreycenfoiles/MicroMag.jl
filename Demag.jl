@@ -24,9 +24,9 @@ function Demag_Kernel(nx, ny, nz, dx, dy, dz)
                         for k = 0:1
                             r = sqrt((I + i - 0.5) * (I + i - 0.5) * dx * dx + (J + j - 0.5) * (J + j - 0.5) * dy * dy + (K + k - 0.5) * (K + k - 0.5) * dz * dz)
 
-                            Kxx_cpu[L, M, N] += (-1)^(i + j + k) * atan((K + k - 0.5) * (J + j - 0.5) * dy * dz / r / ((I + i - 0.5) * dx))
-                            Kyy_cpu[L, M, N] += (-1)^(i + j + k) * atan((I + i - 0.5) * (K + k - 0.5) * dx * dz / r / ((J + j - 0.5) * dy))
-                            Kzz_cpu[L, M, N] += (-1)^(i + j + k) * atan((J + j - 0.5) * (I + i - 0.5) * dy * dx / r / ((K + k - 0.5) * dz))
+                            Kxx_cpu[L, M, N] += (-1)^(i + j + k) * atan((K + k - 0.5) * (J + j - 0.5) * dy * dz / (r * (I + i - 0.5) * dx))
+                            Kyy_cpu[L, M, N] += (-1)^(i + j + k) * atan((I + i - 0.5) * (K + k - 0.5) * dx * dz / (r * (J + j - 0.5) * dy))
+                            Kzz_cpu[L, M, N] += (-1)^(i + j + k) * atan((J + j - 0.5) * (I + i - 0.5) * dy * dx / (r * (K + k - 0.5) * dz))
 
                             Kxy_cpu[L, M, N] += (-1)^(i + j + k) * log((K + k - 0.5) * dz + r)
                             Kxz_cpu[L, M, N] += (-1)^(i + j + k) * log((J + j - 0.5) * dy + r)
