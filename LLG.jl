@@ -56,7 +56,7 @@ Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft = Demag_Kernel(nx, ny, nz, 
 
 H_exch = CUDA.zeros(3, nx, ny, nz);
 
-function LLG_loop!(dm, m0, p, t)
+function LLG_loop!(dm::CuArray{Float32,4}, m0::CuArray{Float32,4}, p, t)
 
     Ms, A, alpha = p
 
@@ -84,21 +84,23 @@ function LLG_loop!(dm, m0, p, t)
     @inbounds My_pad[1:nx, 1:ny, 1:nz] = My .* Ms
     @inbounds Mz_pad[1:nx, 1:ny, 1:nz] = Mz .* Ms
 
-    @. Hx_demag_fft = Mx_fft * Kxx_fft + My_fft .* Kxy_fft + Mz_fft * Kxz_fft # calc demag field with fft
-    @. Hy_demag_fft = Mx_fft * Kxy_fft + My_fft .* Kyy_fft + Mz_fft * Kyz_fft
-    @. Hz_demag_fft = Mx_fft * Kxz_fft + My_fft .* Kyz_fft + Mz_fft * Kzz_fft
-
     mul!(Mx_fft, plan, Mx_pad)
     mul!(My_fft, plan, My_pad)
     mul!(Mz_fft, plan, Mz_pad)
+
+    @. Hx_demag_fft = Mx_fft * Kxx_fft + My_fft * Kxy_fft + Mz_fft * Kxz_fft # calc demag field with fft
+    @. Hy_demag_fft = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
+    @. Hz_demag_fft = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
+
+
 
     mul!(Hx_demag, iplan, Hx_demag_fft)
     mul!(Hy_demag, iplan, Hy_demag_fft)
     mul!(Hz_demag, iplan, Hz_demag_fft)
 
-    @inbounds Hx_eff .= real(Hx_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
-    @inbounds Hy_eff .= real(Hy_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
-    @inbounds Hz_eff .= real(Hz_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
+    @inbounds Hx_eff .= real.(Hx_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
+    @inbounds Hy_eff .= real.(Hy_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
+    @inbounds Hz_eff .= real.(Hz_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
 
     ####################
     ## Exchange Field ##
@@ -119,7 +121,7 @@ function LLG_loop!(dm, m0, p, t)
         prefactor1 = -gamma / (1 + alpha * alpha)
         prefactor2 = prefactor1 * alpha
     end
-    
+
     # apply LLG equation
     @. MxHx = My * Hz_eff - Mz * Hy_eff # = M cross H
     @. MxHy = Mz * Hx_eff - Mx * Hz_eff
@@ -164,6 +166,8 @@ prob = ODEProblem(LLG_loop!, m0, tspan, p);
 SS = TerminateSteadyState(1e-5, 1e-5)
 # saveat=2000 if memory becomes an issue
 sol = solve(prob, BS3(), progress=true, progress_steps=500, abstol=1e-10);
+
+@profview solve(prob, BS3(), progress=true, progress_steps=500, abstol=1e-10);
 
 
 # # The '...' is absolutely necessary here. It's called splatting and I don't know 
