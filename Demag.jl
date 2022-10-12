@@ -2,7 +2,7 @@
 
 # Yoshinobu Nakatani et al 1989 Jpn. J. Appl. Phys. 28 2485
 
-function Demag_Kernel(nx, ny, nz, dx, dy, dz)
+@memoize function Demag_Kernel(nx, ny, nz, dx, dy, dz)
 
     prefactor = 1 / 4 / pi
 
@@ -13,7 +13,7 @@ function Demag_Kernel(nx, ny, nz, dx, dy, dz)
     Kyz_cpu = zeros(2 * nx, 2 * ny, 2 * nz)
     Kzz_cpu = zeros(2 * nx, 2 * ny, 2 * nz)
 
-    @inbounds for K = -nz+1:nz-1 # Calculation of Demag tensor
+    @inbounds @simd for K = -nz+1:nz-1 # Calculation of Demag tensor
         for J = -ny+1:ny-1
             for I = -nx+1:nx-1
                 L = I + nx # shift the indices, b/c no negative index allowed in Julia

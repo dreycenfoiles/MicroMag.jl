@@ -26,7 +26,7 @@ function Exchange_kernel(H_exch, M, dx, dy, dz)
     jp1 = neumann_bc(j + 1, ny)
     jm1 = neumann_bc(j - 1, ny)
 
-   H_exch[c, i, j, 1] = (M[c, ip1, j, 1] - 2 * M[c, i, j, 1] + M[c, im1, j, 1]) / dx / dx +
+   @views H_exch[c, i, j, 1] = (M[c, ip1, j, 1] - 2 * M[c, i, j, 1] + M[c, im1, j, 1]) / dx / dx +
                         (M[c, i, jp1, 1] - 2 * M[c, i, j, 1] + M[c, i, jm1, 1]) / dy / dy
 
     nothing

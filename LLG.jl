@@ -5,6 +5,8 @@ using DifferentialEquations
 using Plots
 using LinearAlgebra
 using PreallocationTools
+using Memoize
+using LoopVectorization
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
@@ -41,7 +43,9 @@ Hx_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 Hy_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 Hz_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 
-H_eff = CUDA.zeros(Float32, 3, nx, ny, nz);
+Hx_eff = CUDA.zeros(Float32, nx, ny, nz);
+Hy_eff = CUDA.zeros(Float32, nx, ny, nz);
+Hz_eff = CUDA.zeros(Float32, nx, ny, nz);
 
 MxHx = CUDA.zeros(Float32, nx, ny, nz);
 MxHy = CUDA.zeros(Float32, nx, ny, nz);
@@ -63,10 +67,6 @@ function LLG_loop!(dm::CuArray{Float32,4}, m0::CuArray{Float32,4}, p, t)
     prefactor1 = -gamma / (1 + alpha * alpha)
     prefactor2 = prefactor1 * alpha
     exch = 2 * A / mu_0 / Ms
-
-    Hx_eff = @views H_eff[1, :, :, :]
-    Hy_eff = @views H_eff[2, :, :, :]
-    Hz_eff = @views H_eff[3, :, :, :]
 
     #################
     ## Demag Field ##
@@ -92,15 +92,13 @@ function LLG_loop!(dm::CuArray{Float32,4}, m0::CuArray{Float32,4}, p, t)
     @. Hy_demag_fft = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
     @. Hz_demag_fft = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
 
-
-
     mul!(Hx_demag, iplan, Hx_demag_fft)
     mul!(Hy_demag, iplan, Hy_demag_fft)
     mul!(Hz_demag, iplan, Hz_demag_fft)
 
-    @inbounds Hx_eff .= real.(Hx_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
-    @inbounds Hy_eff .= real.(Hy_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
-    @inbounds Hz_eff .= real.(Hz_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
+    @inbounds @views Hx_eff .= real(Hx_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
+    @inbounds @views Hy_eff .= real(Hy_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
+    @inbounds @views Hz_eff .= real(Hz_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
 
     ####################
     ## Exchange Field ##
@@ -108,7 +106,9 @@ function LLG_loop!(dm::CuArray{Float32,4}, m0::CuArray{Float32,4}, p, t)
 
     Exchange!(H_exch, m0, exch, dx, dy, dz)
 
-    H_eff .+= H_exch
+    Hx_eff .+= @views H_exch[1, :, :, :]
+    Hy_eff .+= @views H_exch[2, :, :, :]
+    Hz_eff .+= @views H_exch[3, :, :, :]
 
     if t < 0.05
         Hx_eff .+= 0.1 / 1e18 / mu_0 # apply a saturation field to get S-state
@@ -127,9 +127,9 @@ function LLG_loop!(dm::CuArray{Float32,4}, m0::CuArray{Float32,4}, p, t)
     @. MxHy = Mz * Hx_eff - Mx * Hz_eff
     @. MxHz = Mx * Hy_eff - My * Hx_eff
 
-    @. dm[1, :, :, :] = prefactor1 * MxHx + prefactor2 * (My * MxHz - Mz * MxHy)
-    @. dm[2, :, :, :] = prefactor1 * MxHy + prefactor2 * (Mz * MxHx - Mx * MxHz)
-    @. dm[3, :, :, :] = prefactor1 * MxHz + prefactor2 * (Mx * MxHy - My * MxHx)
+    @. @views dm[1, :, :, :] = prefactor1 * MxHx + prefactor2 * (My * MxHz - Mz * MxHy)
+    @. @views dm[2, :, :, :] = prefactor1 * MxHy + prefactor2 * (Mz * MxHx - Mx * MxHz)
+    @. @views dm[3, :, :, :] = prefactor1 * MxHz + prefactor2 * (Mx * MxHy - My * MxHx)
 
     nothing
 
@@ -138,7 +138,7 @@ end
 function check_normalize!(m)
     nc, nx, ny, nz = size(m)
 
-    for index in CartesianIndices((nx, ny, nz))
+    @simd for index in CartesianIndices((nx, ny, nz))
         current_m = @views m[:, index]
         if norm(current_m) != 1
             normalize!(current_m)
@@ -150,6 +150,7 @@ end
 
 end_point = 1
 tspan = (0, end_point)
+t_points = range(0, end_point, length=200)
 
 alpha = 0.5; # damping constant to relax system to S-state
 A = 1.3E-11 / 1e9; # nanometer/nanosecond units
@@ -159,15 +160,25 @@ p = (Ms, A, alpha)
 m0 = CUDA.zeros(Float32, 3, nx, ny, nz)
 m0[1, :, :, :] .= 1
 m0[2, :, :, :] .= 1
+m0[3, :, :, :] .= 1
 check_normalize!(m0)
+
+function Relax(m0)
+    prob = SteadyStateProblem(LLG_loop!, m0, p)
+    # saveat=2000 if memory becomes an issue
+    sol = solve(prob, DynamicSS(OwrenZen3()), abstol=1e-2, reltol=1e-2)
+    return sol
+end
 
 
 prob = ODEProblem(LLG_loop!, m0, tspan, p);
-SS = TerminateSteadyState(1e-5, 1e-5)
 # saveat=2000 if memory becomes an issue
-sol = solve(prob, BS3(), progress=true, progress_steps=500, abstol=1e-10);
+sol = solve(prob, OwrenZen3(), progress=true, progress_steps=500, abstol=1e-3, reltol=1e-3, saveat=t_points);
 
-@profview solve(prob, BS3(), progress=true, progress_steps=500, abstol=1e-10);
+# sol = solve(prob, OwrenZen3(), progress=true, progress_steps=500, abstol=1e-3, reltol=1e-3, callback=SS, saveat=2000);
+
+# @profview solve(prob, BS3(), progress=true, progress_steps=500, abstol=1e-10);
+# @btime solve(prob, OwrenZen3(), progress=true, progress_steps=500, abstol=1e-3, reltol=1e-3);
 
 
 # # The '...' is absolutely necessary here. It's called splatting and I don't know 
