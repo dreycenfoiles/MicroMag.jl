@@ -20,7 +20,6 @@ dy = 3; # cell volume = dd x dd x dd
 dz = 3; # cell volume = dd x dd x dd
 
 mu_0 = pi*4e-7/1e9; # vacuum permeability, = 4 * pi / 10
-dt = 1e-4; # timestep in nanosecond
 
 Mx_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
 My_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
@@ -56,9 +55,9 @@ function LLG_loop!(dm, m0, p, t)
 
     Ms, A, alpha = p
 
-    prefactor1 = -2.221e5 * dt / (1 + alpha * alpha)
-    prefactor2 = prefactor1 * alpha / Ms
-    exch = 2 * A / mu_0 / Ms / Ms
+    prefactor1 = -2.221e5 / (1 + alpha * alpha)
+    prefactor2 = prefactor1 * alpha
+    exch = 2 * A / mu_0 / Ms
 
     Hx_eff = @views H_eff[1, :, :, :]
     Hy_eff = @views H_eff[2, :, :, :]
@@ -76,9 +75,9 @@ function LLG_loop!(dm, m0, p, t)
     fill!(My_pad, 0)
     fill!(Mz_pad, 0)
 
-    Mx_pad[1:nx, 1:ny, 1:nz] = Mx
-    My_pad[1:nx, 1:ny, 1:nz] = My
-    Mz_pad[1:nx, 1:ny, 1:nz] = Mz
+    Mx_pad[1:nx, 1:ny, 1:nz] = Mx .* Ms
+    My_pad[1:nx, 1:ny, 1:nz] = My .* Ms
+    Mz_pad[1:nx, 1:ny, 1:nz] = Mz .* Ms
 
     mul!(Mx_fft, plan, Mx_pad)
     mul!(My_fft, plan, My_pad)
@@ -114,29 +113,26 @@ function LLG_loop!(dm, m0, p, t)
 
     H_eff .+= H_exch
 
-    if t < 500
+    if t < .05
         Hx_eff .+= .1/1e18/mu_0 # apply a saturation field to get S-state
         Hy_eff .+= .1/1e18/mu_0
         Hz_eff .+= .1/1e18/mu_0
-    elseif t > 2500
+    elseif t > .25
         Hx_eff .+= -24.6e-3/1e18/mu_0 # apply the reverse field
         Hy_eff .+= +4.3e-3/1e18/mu_0
         alpha = 0.02
-        prefactor1 = -2.221e5 * dt / (1 + alpha * alpha)
-        prefactor2 = prefactor1 * alpha / Ms
+        prefactor1 = -2.221e5 / (1 + alpha * alpha)
+        prefactor2 = prefactor1 * alpha
     end
     # apply LLG equation
     @. MxHx = My * Hz_eff - Mz * Hy_eff # = M cross H
     @. MxHy = Mz * Hx_eff - Mx * Hz_eff
     @. MxHz = Mx * Hy_eff - My * Hx_eff
 
-    # @show t * dt
-
     @. dm[1, :, :, :] = prefactor1 * MxHx + prefactor2 * (My * MxHz - Mz * MxHy)
     @. dm[2, :, :, :] = prefactor1 * MxHy + prefactor2 * (Mz * MxHx - Mx * MxHz)
     @. dm[3, :, :, :] = prefactor1 * MxHz + prefactor2 * (Mx * MxHy - My * MxHx)
 
-    # @show dm[1, :, :, :]
     nothing
 
 end
@@ -154,7 +150,7 @@ end
 # end
 
 
-end_point = 10000
+end_point = 1
 tspan = (0, end_point)
 
 alpha = 0.5; # damping constant to relax system to S-state
@@ -163,7 +159,7 @@ Ms = 8e5/1e9; # saturation magnetization
 p = (Ms, A, alpha)
 
 m0 = CUDA.zeros(Float32, 3, nx, ny, nz)
-m0[2, :, :, :] .= Ms
+m0[2, :, :, :] .= 1
 
 
 prob = ODEProblem(LLG_loop!, m0, tspan, p);
