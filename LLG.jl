@@ -14,12 +14,15 @@ global_logger(TerminalLogger())
 
 CUDA.allowscalar(false)
 
-nx = 166; # number of cells on x direction
-ny = 42;
+nx = 300; # number of cells on x direction
+ny = 300;
 nz = 1;
 dx = 3; # cell volume = dd x dd x dd
 dy = 3; # cell volume = dd x dd x dd
 dz = 3; # cell volume = dd x dd x dd
+
+indices1 = CartesianIndices((3, nx, ny, nz))
+indices2 = CartesianIndices((3, nx:(2*nx-1), ny:(2*ny-1), nz*(2*nz-1)))
 
 const mu_0 = pi * 4e-7 / 1e9; # vacuum permeability, = 4 * pi / 10
 const gamma = 2.221e5
@@ -45,14 +48,10 @@ include("Exchange.jl")
 
 Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft = Demag_Kernel(nx, ny, nz, dx, dy, dz)
 
-
-H_exch = CUDA.zeros(3, nx, ny, nz);
-
 function LLG_loop!(dm, m0, p, t)
 
     Hx_eff = @view H_eff[1, :, :, :]
     Hy_eff = @view H_eff[2, :, :, :]
-    Hz_eff = @view H_eff[3, :, :, :]
 
     Ms, A, alpha = p
 
@@ -66,9 +65,7 @@ function LLG_loop!(dm, m0, p, t)
 
     fill!(M_pad, 0)
 
-    ind = CartesianIndices(m0)
-
-    @inbounds M_pad[ind] = m0 .* Ms
+    @inbounds M_pad[indices1] = m0 .* Ms
 
     mul!(M_fft, plan, M_pad)
 
@@ -76,34 +73,22 @@ function LLG_loop!(dm, m0, p, t)
     My_fft = @view M_fft[2, :, :, :]
     Mz_fft = @view M_fft[3, :, :, :]
 
-    @. @views H_demag_fft[1, :, :, :] = Mx_fft * Kxx_fft + My_fft * Kxy_fft + Mz_fft * Kxz_fft # calc demag field with fft
-    @. @views H_demag_fft[2, :, :, :] = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
-    @. @views H_demag_fft[3, :, :, :] = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
+    @. H_demag_fft[1, :, :, :] = Mx_fft * Kxx_fft + My_fft * Kxy_fft + Mz_fft * Kxz_fft # calc demag field with fft
+    @. H_demag_fft[2, :, :, :] = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
+    @. H_demag_fft[3, :, :, :] = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
 
     mul!(H_demag, iplan, H_demag_fft)
 
-    Hx_demag = @view H_demag[1, :, :, :]
-    Hy_demag = @view H_demag[2, :, :, :]
-    Hz_demag = @view H_demag[3, :, :, :]
-
-    @inbounds @views Hx_eff .= real(Hx_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
-    @inbounds @views Hy_eff .= real(Hy_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
-    @inbounds @views Hz_eff .= real(Hz_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
+    @inbounds H_eff .= real(H_demag[indices2]) # truncation of demag field
 
     ####################
     ## Exchange Field ##
     ####################
 
-    Exchange!(H_exch, m0, exch, dx, dy, dz)
-
-    Hx_eff .+= @views H_exch[1, :, :, :]
-    Hy_eff .+= @views H_exch[2, :, :, :]
-    Hz_eff .+= @views H_exch[3, :, :, :]
+    Exchange!(H_eff, m0, exch, dx, dy, dz)
 
     if t < 0.05
-        Hx_eff .+= 0.1 / 1e18 / mu_0 # apply a saturation field to get S-state
-        Hy_eff .+= 0.1 / 1e18 / mu_0
-        Hz_eff .+= 0.1 / 1e18 / mu_0
+        H_eff .+= 0.1 / 1e18 / mu_0 # apply a saturation field to get S-state
     elseif t > 0.25
         Hx_eff .+= -24.6e-3 / 1e18 / mu_0 # apply the reverse field
         Hy_eff .+= +4.3e-3 / 1e18 / mu_0
@@ -147,14 +132,13 @@ function check_normalize!(m)
         if norm(current_m) != 1
             normalize!(current_m)
         end
-
     end
 end
 
 
 end_point = 1
 tspan = (0, end_point)
-t_points = range(0, end_point, length=200)
+t_points = range(0, end_point, length=300)
 
 alpha = 0.5; # damping constant to relax system to S-state
 A = 1.3E-11 / 1e9; # nanometer/nanosecond units
