@@ -24,32 +24,20 @@ dz = 3; # cell volume = dd x dd x dd
 const mu_0 = pi * 4e-7 / 1e9; # vacuum permeability, = 4 * pi / 10
 const gamma = 2.221e5
 
-Mx_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
-My_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
-Mz_pad = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+M_pad = CUDA.zeros(Float32, 3, nx * 2, ny * 2, nz * 2);
 
-Mx_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2);
-My_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
-Mz_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
+M_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2, nz * 2);
 
-Hx_demag_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
-Hy_demag_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
-Hz_demag_fft = CUDA.zeros(ComplexF32, nx + 1, ny * 2, nz * 2)
+H_demag_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2, nz * 2)
 
-plan = plan_rfft(Mx_pad);
-iplan = plan_irfft(Mx_fft, 2 * nx);
+plan = plan_rfft(M_pad, [2, 3, 4]);
+iplan = plan_irfft(M_fft, 2 * nx, [2, 3, 4]);
 
-Hx_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
-Hy_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
-Hz_demag = CUDA.zeros(Float32, nx * 2, ny * 2, nz * 2);
+H_demag = CUDA.zeros(Float32, 3, nx * 2, ny * 2, nz * 2);
 
-Hx_eff = CUDA.zeros(Float32, nx, ny, nz);
-Hy_eff = CUDA.zeros(Float32, nx, ny, nz);
-Hz_eff = CUDA.zeros(Float32, nx, ny, nz);
+H_eff = CUDA.zeros(Float32, 3, nx, ny, nz);
 
-MxHx = CUDA.zeros(Float32, nx, ny, nz);
-MxHy = CUDA.zeros(Float32, nx, ny, nz);
-MxHz = CUDA.zeros(Float32, nx, ny, nz);
+M_x_H = CUDA.zeros(Float32, 3, nx, ny, nz);
 
 
 include("Demag.jl")
@@ -60,7 +48,11 @@ Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft = Demag_Kernel(nx, ny, nz, 
 
 H_exch = CUDA.zeros(3, nx, ny, nz);
 
-function LLG_loop!(dm::CuArray{Float32,4}, m0::CuArray{Float32,4}, p, t)
+function LLG_loop!(dm, m0, p, t)
+
+    Hx_eff = @view H_eff[1, :, :, :]
+    Hy_eff = @view H_eff[2, :, :, :]
+    Hz_eff = @view H_eff[3, :, :, :]
 
     Ms, A, alpha = p
 
@@ -72,29 +64,27 @@ function LLG_loop!(dm::CuArray{Float32,4}, m0::CuArray{Float32,4}, p, t)
     ## Demag Field ##
     #################
 
-    Mx = @views m0[1, :, :, :]
-    My = @views m0[2, :, :, :]
-    Mz = @views m0[3, :, :, :]
+    fill!(M_pad, 0)
 
-    fill!(Mx_pad, 0)
-    fill!(My_pad, 0)
-    fill!(Mz_pad, 0)
+    ind = CartesianIndices(m0)
 
-    @inbounds Mx_pad[1:nx, 1:ny, 1:nz] = Mx .* Ms
-    @inbounds My_pad[1:nx, 1:ny, 1:nz] = My .* Ms
-    @inbounds Mz_pad[1:nx, 1:ny, 1:nz] = Mz .* Ms
+    @inbounds M_pad[ind] = m0 .* Ms
 
-    mul!(Mx_fft, plan, Mx_pad)
-    mul!(My_fft, plan, My_pad)
-    mul!(Mz_fft, plan, Mz_pad)
+    mul!(M_fft, plan, M_pad)
 
-    @. Hx_demag_fft = Mx_fft * Kxx_fft + My_fft * Kxy_fft + Mz_fft * Kxz_fft # calc demag field with fft
-    @. Hy_demag_fft = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
-    @. Hz_demag_fft = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
+    Mx_fft = @view M_fft[1, :, :, :]
+    My_fft = @view M_fft[2, :, :, :]
+    Mz_fft = @view M_fft[3, :, :, :]
 
-    mul!(Hx_demag, iplan, Hx_demag_fft)
-    mul!(Hy_demag, iplan, Hy_demag_fft)
-    mul!(Hz_demag, iplan, Hz_demag_fft)
+    @. @views H_demag_fft[1, :, :, :] = Mx_fft * Kxx_fft + My_fft * Kxy_fft + Mz_fft * Kxz_fft # calc demag field with fft
+    @. @views H_demag_fft[2, :, :, :] = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
+    @. @views H_demag_fft[3, :, :, :] = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
+
+    mul!(H_demag, iplan, H_demag_fft)
+
+    Hx_demag = @view H_demag[1, :, :, :]
+    Hy_demag = @view H_demag[2, :, :, :]
+    Hz_demag = @view H_demag[3, :, :, :]
 
     @inbounds @views Hx_eff .= real(Hx_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)]) # truncation of demag field
     @inbounds @views Hy_eff .= real(Hy_demag[nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)])
@@ -123,16 +113,30 @@ function LLG_loop!(dm::CuArray{Float32,4}, m0::CuArray{Float32,4}, p, t)
     end
 
     # apply LLG equation
-    @. MxHx = My * Hz_eff - Mz * Hy_eff # = M cross H
-    @. MxHy = Mz * Hx_eff - Mx * Hz_eff
-    @. MxHz = Mx * Hy_eff - My * Hx_eff
+    cross!(M_x_H, m0, H_eff)
+    cross!(dm, m0, M_x_H)
 
-    @. @views dm[1, :, :, :] = prefactor1 * MxHx + prefactor2 * (My * MxHz - Mz * MxHy)
-    @. @views dm[2, :, :, :] = prefactor1 * MxHy + prefactor2 * (Mz * MxHx - Mx * MxHz)
-    @. @views dm[3, :, :, :] = prefactor1 * MxHz + prefactor2 * (Mx * MxHy - My * MxHx)
+    dm .*= prefactor2
+    @. dm += prefactor1 * M_x_H
 
     nothing
 
+end
+
+
+function cross!(product, A, B)
+
+    Ax = @views A[1, :, :, :]
+    Ay = @views A[2, :, :, :]
+    Az = @views A[3, :, :, :]
+
+    Bx = @views B[1, :, :, :]
+    By = @views B[2, :, :, :]
+    Bz = @views B[3, :, :, :]
+
+    @. @views product[1, :, :, :] = Ay * Bz - Az * By
+    @. @views product[2, :, :, :] = Az * Bx - Ax * Bz
+    @. @views product[3, :, :, :] = Ax * By - Ay * Bx
 end
 
 function check_normalize!(m)
