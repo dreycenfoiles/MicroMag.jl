@@ -1,3 +1,5 @@
+module MicroMag
+
 using Statistics
 using CUDA
 using CUDA.CUFFT
@@ -6,7 +8,6 @@ using Plots
 using LinearAlgebra
 using PreallocationTools
 using Memoize
-using LoopVectorization
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
@@ -14,8 +15,8 @@ global_logger(TerminalLogger())
 
 CUDA.allowscalar(false)
 
-nx = 300; # number of cells on x direction
-ny = 300;
+nx = 30; # number of cells on x direction
+ny = 30;
 nz = 1;
 dx = 3; # cell volume = dd x dd x dd
 dy = 3; # cell volume = dd x dd x dd
@@ -48,7 +49,11 @@ include("Exchange.jl")
 
 Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft = Demag_Kernel(nx, ny, nz, dx, dy, dz)
 
+count = 0 
+
 function LLG_loop!(dm, m0, p, t)
+
+    global count += 1
 
     Hx_eff = @view H_eff[1, :, :, :]
     Hy_eff = @view H_eff[2, :, :, :]
@@ -124,19 +129,12 @@ function cross!(product, A, B)
     @. @views product[3, :, :, :] = Ax * By - Ay * Bx
 end
 
-function check_normalize!(m)
-    nc, nx, ny, nz = size(m)
-
-    @simd for index in CartesianIndices((nx, ny, nz))
-        current_m = @views m[:, index]
-        if norm(current_m) != 1
-            normalize!(current_m)
-        end
-    end
-end
+check_normalize!(m) = m ./= sqrt.(sum(m.^2,dims=1))
+normalize_llg!(integrator) = check_normalize!(integrator.u)
+condition(u, t, integrator) = true
 
 
-end_point = 1
+end_point = .8
 tspan = (0, end_point)
 t_points = range(0, end_point, length=300)
 
@@ -159,9 +157,10 @@ function Relax(m0)
 end
 
 
+cb = DiscreteCallback(condition, normalize_llg!)
+
 prob = ODEProblem(LLG_loop!, m0, tspan, p);
-# saveat=2000 if memory becomes an issue
-sol = solve(prob, OwrenZen3(), progress=true, progress_steps=500, abstol=1e-3, reltol=1e-3, saveat=t_points);
+sol = solve(prob, Tsit5(), progress=true, progress_steps=500, abstol=1e-3, reltol=1e-3, saveat=t_points);
 
 # sol = solve(prob, OwrenZen3(), progress=true, progress_steps=500, abstol=1e-3, reltol=1e-3, callback=SS, saveat=2000);
 
@@ -186,4 +185,6 @@ m_norm = sqrt.(mx_avg .^ 2 + my_avg .^ 2 + mz_avg .^ 2)
 plot(sol.t, mx_avg, label="mx")
 plot!(sol.t, my_avg, label="my", color="orange")
 plot!(sol.t, mz_avg, label="mz")
-# plot!(sol.t, m_norm, label="norm")
+plot!(sol.t, m_norm, label="norm")
+
+end # module MicroMag.jl
