@@ -15,6 +15,8 @@ end
 
 function Exchange_kernel(H_eff, M, exch, dx, dy, dz)
 
+    # TODO: Generalize to 3D
+
     nc, nx, ny, nz = size(M)
 
     c = blockIdx().x 
