@@ -2,7 +2,7 @@
 
 julia_version = "1.8.1"
 manifest_format = "2.0"
-project_hash = "947c80ffbd75a1d6845c775139c6739f8a4861c9"
+project_hash = "f95189bddf2644a397dc5b5aadb3f5dec3535cb6"
 
 [[deps.AbstractFFTs]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -90,6 +90,12 @@ version = "0.17.7"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[deps.BenchmarkTools]]
+deps = ["JSON", "Logging", "Printf", "Profile", "Statistics", "UUIDs"]
+git-tree-sha1 = "d9a9701b899b30332bbcb3e1679c41cce81fb0e8"
+uuid = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+version = "1.3.2"
 
 [[deps.BitFlags]]
 git-tree-sha1 = "84259bb6172806304b9101094a7cc4bc6f56dbc6"
@@ -1048,6 +1054,10 @@ version = "1.3.0"
 [[deps.Printf]]
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[[deps.Profile]]
+deps = ["Printf"]
+uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 
 [[deps.ProgressLogging]]
 deps = ["Logging", "SHA", "UUIDs"]
