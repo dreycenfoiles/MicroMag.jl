@@ -20,21 +20,27 @@ function Exchange_kernel(H_eff, M, exch, dx, dy, dz)
     nc, nx, ny, nz = size(M)
 
     c = blockIdx().x 
-    j = blockIdx().y
-    i = threadIdx().x
+    i = blockIdx().y
+    j = threadIdx().x
+    k = threadIdx().y
 
     ip1 = neumann_bc(i + 1, nx)
     im1 = neumann_bc(i - 1, nx)
+
     jp1 = neumann_bc(j + 1, ny)
     jm1 = neumann_bc(j - 1, ny)
 
+    kp1 = neumann_bc(k + 1, nz)
+    km1 = neumann_bc(k - 1, nz)
 
-    laplace = (M[c, ip1, j, 1] - 2 * M[c, i, j, 1] + M[c, im1, j, 1]) / dx / dx +
-              (M[c, i, jp1, 1] - 2 * M[c, i, j, 1] + M[c, i, jm1, 1]) / dy / dy
+
+    laplace = (M[c, ip1, j, k] - 2 * M[c, i, j, k] + M[c, im1, j, k]) / (dx*dx) +
+              (M[c, i, jp1, k] - 2 * M[c, i, j, k] + M[c, i, jm1, k]) / (dy*dy) + 
+              (M[c, i, j, kp1] - 2 * M[c, i, j, k] + M[c, i, j, km1]) / (dz*dz)
 
     laplace *= exch 
 
-    H_eff[c, i, j, 1] += laplace
+    H_eff[c, i, j, k] += laplace
 
     nothing
 end 
@@ -44,7 +50,7 @@ function Exchange!(H_eff, M, exch, dx, dy, dz)
     nc, nx, ny, nz = size(M)
 
     # FIXME: Will error if nx >= 1024
-    @cuda blocks=(nc, ny) threads=nx Exchange_kernel(H_eff, M, exch, dx, dy, dz)
+    @cuda blocks=(nc, nx) threads=(ny, nz) Exchange_kernel(H_eff, M, exch, dx, dy, dz)
 
     return
 end
