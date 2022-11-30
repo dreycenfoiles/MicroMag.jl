@@ -62,6 +62,30 @@
     return Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft
 end
 
+function Demag!(H_eff, M_pad, M_fft, H_demag, H_demag_fft, fft_plans, Mx_kernels, My_kernels, Mz_kernels, output_indices)
 
+    Kxx_fft, Kxy_fft, Kxz_fft = Mx_kernels
+    Kxy_fft, Kyy_fft, Kyz_fft = My_kernels
+    Kxz_fft, Kyz_fft, Kzz_fft = Mz_kernels
+
+    plan, iplan = fft_plans
+
+
+    mul!(M_fft, plan, M_pad)
+
+    Mx_fft = @view M_fft[1, :, :, :]
+    My_fft = @view M_fft[2, :, :, :]
+    Mz_fft = @view M_fft[3, :, :, :]
+
+    @. H_demag_fft[1, :, :, :] = Mx_fft * Kxx_fft + My_fft * Kxy_fft + Mz_fft * Kxz_fft
+    @. H_demag_fft[2, :, :, :] = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
+    @. H_demag_fft[3, :, :, :] = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
+
+    mul!(H_demag, iplan, H_demag_fft)
+
+    @inbounds H_eff .= real(H_demag[output_indices]) # truncation of demag field
+
+    nothing
+end
 
 
