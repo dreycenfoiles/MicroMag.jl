@@ -81,9 +81,9 @@ function LLG_loop!(dm, m0, p, t)
     if t < 0.05
         H_eff .+= 0.1 / 1e18 / mu_0 # apply a saturation field to get S-state
     elseif t > 0.25
-        Hx_eff .+= -24.6e-3 / 1e18 / mu_0 # apply the reverse field
+        Hx_eff .+= -50e-3 * sin(2*10*pi*t) / 1e18 / mu_0 # apply the reverse field
         Hy_eff .+= +4.3e-3 / 1e18 / mu_0
-        alpha = 0.02
+        alpha = 0.025
         prefactor1 = -gamma / (1 + alpha * alpha)
         prefactor2 = prefactor1 * alpha
     end

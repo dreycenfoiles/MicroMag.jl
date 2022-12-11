@@ -7,6 +7,7 @@ using Plots
 using LinearAlgebra
 using PreallocationTools
 using Memoize
+using LaTeXStrings
 
 
 nx = 166 # number of cells on x direction
@@ -81,9 +82,9 @@ mx_avg = mean(mx_vals, dims=[1, 2, 3])[1, 1, 1, :]
 my_avg = mean(my_vals, dims=[1, 2, 3])[1, 1, 1, :]
 mz_avg = mean(mz_vals, dims=[1, 2, 3])[1, 1, 1, :]
 
-m_norm = sqrt.(mx_avg .^ 2 + my_avg .^ 2 + mz_avg .^ 2)
+# plot(sol.t, mx_avg, label="mx")
+# plot!(sol.t, my_avg, label="my", color="orange")
+# plot!(sol.t, mz_avg, label=L"\alpha=0.025")
+xaxis!("Time (ns)")
+yaxis!("mz")
 
-plot(sol.t, mx_avg, label="mx")
-plot!(sol.t, my_avg, label="my", color="orange")
-plot!(sol.t, mz_avg, label="mz")
-plot!(sol.t, m_norm, label="norm")
