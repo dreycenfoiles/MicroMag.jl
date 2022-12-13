@@ -1,4 +1,4 @@
-
+using FFTW 
 
 # Yoshinobu Nakatani et al 1989 Jpn. J. Appl. Phys. 28 2485
 
@@ -45,21 +45,23 @@
             end
         end
     end
-    Kxx = CuArray{Float32}(Kxx_cpu)
-    Kxy = CuArray{Float32}(Kxy_cpu)
-    Kxz = CuArray{Float32}(Kxz_cpu)
-    Kyy = CuArray{Float32}(Kyy_cpu)
-    Kyz = CuArray{Float32}(Kyz_cpu)
-    Kzz = CuArray{Float32}(Kzz_cpu)
 
-    Kxx_fft = rfft(Kxx) # fast fourier transform of demag tensor
-    Kxy_fft = rfft(Kxy) # needs to be done only one time
-    Kxz_fft = rfft(Kxz)
-    Kyy_fft = rfft(Kyy)
-    Kyz_fft = rfft(Kyz)
-    Kzz_fft = rfft(Kzz)
+    Kxx_fft_cpu = rfft(Kxx_cpu) # fast fourier transform of demag tensor
+    Kxy_fft_cpu = rfft(Kxy_cpu) # needs to be done only one time
+    Kxz_fft_cpu = rfft(Kxz_cpu)
+    Kyy_fft_cpu = rfft(Kyy_cpu)
+    Kyz_fft_cpu = rfft(Kyz_cpu)
+    Kzz_fft_cpu = rfft(Kzz_cpu)
+
+    Kxx_fft = CuArray{ComplexF32}(Kxx_fft_cpu)
+    Kxy_fft = CuArray{ComplexF32}(Kxy_fft_cpu)
+    Kxz_fft = CuArray{ComplexF32}(Kxz_fft_cpu)
+    Kyy_fft = CuArray{ComplexF32}(Kyy_fft_cpu)
+    Kyz_fft = CuArray{ComplexF32}(Kyz_fft_cpu)
+    Kzz_fft = CuArray{ComplexF32}(Kzz_fft_cpu)
 
     return Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft
+
 end
 
 function Demag!(H_eff, M_pad, M_fft, H_demag, H_demag_fft, fft_plans, Mx_kernels, My_kernels, Mz_kernels, output_indices)
@@ -69,7 +71,6 @@ function Demag!(H_eff, M_pad, M_fft, H_demag, H_demag_fft, fft_plans, Mx_kernels
     Kxz_fft, Kyz_fft, Kzz_fft = Mz_kernels
 
     plan, iplan = fft_plans
-
 
     mul!(M_fft, plan, M_pad)
 
@@ -87,5 +88,8 @@ function Demag!(H_eff, M_pad, M_fft, H_demag, H_demag_fft, fft_plans, Mx_kernels
 
     nothing
 end
+
+
+Kxx, Kyy, Kzz, Kxy, Kxz, Kyz = Demag_Kernel(2, 2, 2, 2e-9, 2e-9, 2e-9)
 
 
