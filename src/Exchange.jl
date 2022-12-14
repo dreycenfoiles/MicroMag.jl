@@ -13,11 +13,7 @@ end
 # TODO: Periodic boundary conditions
 
 
-function Exchange_kernel(H_eff, M, exch, dx, dy, dz)
-
-    # TODO: Generalize to 3D
-
-    nc, nx, ny, nz = size(M)
+function Exchange_kernel(H_eff, M, exch, nx, ny, nz, dx, dy, dz)
 
     c = blockIdx().x 
     i = blockIdx().y
@@ -33,7 +29,6 @@ function Exchange_kernel(H_eff, M, exch, dx, dy, dz)
     kp1 = neumann_bc(k + 1, nz)
     km1 = neumann_bc(k - 1, nz)
 
-
     laplace = (M[c, ip1, j, k] - 2 * M[c, i, j, k] + M[c, im1, j, k]) / (dx*dx) +
               (M[c, i, jp1, k] - 2 * M[c, i, j, k] + M[c, i, jm1, k]) / (dy*dy) + 
               (M[c, i, j, kp1] - 2 * M[c, i, j, k] + M[c, i, j, km1]) / (dz*dz)
@@ -45,12 +40,14 @@ function Exchange_kernel(H_eff, M, exch, dx, dy, dz)
     nothing
 end 
 
-function Exchange!(H_eff, M, exch, dx, dy, dz)
+function Exchange!(H_eff, M, exch, mesh)
 
-    nc, nx, ny, nz = size(M)
+    nx = mesh.nx
+    ny = mesh.ny
+    nz = mesh.nz
 
     # FIXME: Will error if nx >= 1024
-    @cuda blocks=(nc, nx) threads=(ny, nz) Exchange_kernel(H_eff, M, exch, dx, dy, dz)
+    @cuda blocks=(3, nx) threads=(ny, nz) Exchange_kernel(H_eff, M, exch, nx, ny, nz, mesh.dx, mesh.dy, mesh.dz)
 
     return
 end

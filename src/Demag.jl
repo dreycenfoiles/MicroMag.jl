@@ -1,4 +1,4 @@
-using FFTW 
+using FFTW
 
 # Yoshinobu Nakatani et al 1989 Jpn. J. Appl. Phys. 28 2485
 
@@ -64,32 +64,23 @@ using FFTW
 
 end
 
-function Demag!(H_eff, M_pad, M_fft, H_demag, H_demag_fft, fft_plans, Mx_kernels, My_kernels, Mz_kernels, output_indices)
+function Demag!(fields::Fields, demag::Demag, mesh::Mesh)
 
-    Kxx_fft, Kxy_fft, Kxz_fft = Mx_kernels
-    Kxy_fft, Kyy_fft, Kyz_fft = My_kernels
-    Kxz_fft, Kyz_fft, Kzz_fft = Mz_kernels
+    mul!(fields.M_fft, demag.fft, fields.M_pad)
 
-    plan, iplan = fft_plans
+    Mx_fft = @view fields.M_fft[1, :, :, :]
+    My_fft = @view fields.M_fft[2, :, :, :]
+    Mz_fft = @view fields.M_fft[3, :, :, :]
 
-    mul!(M_fft, plan, M_pad)
+    @. fields.H_demag_fft[1, :, :, :] = Mx_fft * demag.Kxx_fft + My_fft * demag.Kxy_fft + Mz_fft * demag.Kxz_fft
+    @. fields.H_demag_fft[2, :, :, :] = Mx_fft * demag.Kxy_fft + My_fft * demag.Kyy_fft + Mz_fft * demag.Kyz_fft
+    @. fields.H_demag_fft[3, :, :, :] = Mx_fft * demag.Kxz_fft + My_fft * demag.Kyz_fft + Mz_fft * demag.Kzz_fft
 
-    Mx_fft = @view M_fft[1, :, :, :]
-    My_fft = @view M_fft[2, :, :, :]
-    Mz_fft = @view M_fft[3, :, :, :]
+    ldiv!(fields.H_demag, demag.fft, fields.H_demag_fft)
 
-    @. H_demag_fft[1, :, :, :] = Mx_fft * Kxx_fft + My_fft * Kxy_fft + Mz_fft * Kxz_fft
-    @. H_demag_fft[2, :, :, :] = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
-    @. H_demag_fft[3, :, :, :] = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
-
-    mul!(H_demag, iplan, H_demag_fft)
-
-    @inbounds H_eff .= real(H_demag[output_indices]) # truncation of demag field
+    @inbounds fields.H_eff .= real.(fields.H_demag[mesh.out]) # truncation of demag field
 
     nothing
 end
-
-
-Kxx, Kyy, Kzz, Kxy, Kxz, Kyz = Demag_Kernel(2, 2, 2, 2e-9, 2e-9, 2e-9)
 
 
