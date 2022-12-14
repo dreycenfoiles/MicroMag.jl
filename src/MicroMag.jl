@@ -113,7 +113,7 @@ end
 function Relax(m0, p)
     prob = SteadyStateProblem(LLG_loop!, m0, p)
     # saveat=2000 if memory becomes an issue
-    sol = solve(prob, DynamicSS(OwrenZen3()), abstol=1e-2, reltol=1e-2)
+    sol = solve(prob, DynamicSS(OwrenZen3()), abstol=.9e-2, reltol=.9e-2)
     return sol
 end
 

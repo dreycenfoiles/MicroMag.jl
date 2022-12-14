@@ -1,4 +1,5 @@
 using FFTW
+using Memoize
 
 # Yoshinobu Nakatani et al 1989 Jpn. J. Appl. Phys. 28 2485
 
