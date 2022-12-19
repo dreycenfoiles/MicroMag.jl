@@ -55,13 +55,14 @@ end
 include("Demag.jl")
 include("Exchange.jl")
 include("LLG.jl")
+include("Zeeman.jl")
 
 
 check_normalize!(m) = m ./= sqrt.(sum(m .^ 2, dims=1))
 
 # FIXME: Does converting to Float32 here improve performance?
 # TODO: Make α spatially dependent
-function Init_sim(m0::CuArray{Float32, 4}, dx::Float64, dy::Float64, dz::Float64, A::Float64, Ms::Float64, α::Float64)
+function Init_sim(m0::CuArray{Float32, 4}, dx::Float64, dy::Float64, dz::Float64, A::Float64, Ms::Float64, α::Float64, B_ext::Function)
     
 
     ### Initialize Mesh ###
@@ -106,26 +107,37 @@ function Init_sim(m0::CuArray{Float32, 4}, dx::Float64, dy::Float64, dz::Float64
 
     ##############################
 
-    return (mesh, fields, demag, param)
+    return (mesh, fields, demag, param, B_ext)
 end
 
 
 function Relax(m0, p)
-    prob = SteadyStateProblem(LLG_loop!, m0, p)
+    # prob = SteadyStateProblem(LLG_loop!, m0, p)
+    new_p = (p..., true)
+    cb = TerminateSteadyState(1, 1)
+    end_point = 4
+    tspan = (0, end_point)
+    t_points = range(0, end_point, length=600)
+    prob = ODEProblem(LLG_loop!, m0, tspan, new_p)
     # saveat=2000 if memory becomes an issue
-    sol = solve(prob, DynamicSS(OwrenZen3()), abstol=.9e-2, reltol=.9e-2)
-    return sol
+    sol = solve(prob, OwrenZen3(), progress=true, abstol=1e-3, reltol=1e-3, callback=cb, saveat=t_points, dt=1e-3)
+
+    # cpu_sol = cat([Array(x) for x in sol.u]..., dims=5)
+
+    return sol.u[end]
 end
 
 function Run(m0,t,p)
+
+    new_p = (p..., false)
     
     # TODO: Convert to nice units
     end_point = t
     tspan = (0, end_point)
     t_points = range(0, end_point, length=300)
 
-    prob = ODEProblem(LLG_loop!, m0, tspan, p)
-    sol = solve(prob, OwrenZen3(), progress=true, progress_steps=1000, abstol=1e-3, reltol=1e-3, saveat=t_points)
+    prob = ODEProblem(LLG_loop!, m0, tspan, new_p)
+    sol = solve(prob, OwrenZen3(), progress=true, progress_steps=1000, abstol=1e-3, reltol=1e-3, saveat=t_points, dt=1e-3)
 
     cpu_sol = cat([Array(x) for x in sol.u]..., dims=5)
 
