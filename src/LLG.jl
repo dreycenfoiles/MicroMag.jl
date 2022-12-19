@@ -1,9 +1,13 @@
 
-function LLG_loop!(dm, m0, p, t::Float64)
+function LLG_loop!(dm, m0, p, t)
 
-    mesh, fields, demag, param = p
+    mesh, fields, demag, param, B_ext, relax = p
 
     Ms, A, α = param
+
+    if relax
+        α = 0.5
+    end
 
     prefactor1 = -γ / (1 + α * α)
     prefactor2 = prefactor1 * α
@@ -24,14 +28,19 @@ function LLG_loop!(dm, m0, p, t::Float64)
 
     Exchange!(fields.H_eff, m0, exch, mesh)
 
-    Zeeman!(fields.H_eff,  B_ext(t))
+    if !relax
+        Zeeman!(fields.H_eff, B_ext(t))
+    end
 
     # apply LLG equation
     cross!(fields.M_x_H, m0, fields.H_eff)
     cross!(dm, m0, fields.M_x_H)
 
     dm .*= prefactor2
+
+    if !relax 
     @. dm += prefactor1 * fields.M_x_H
+    end
 
     nothing
 
