@@ -18,8 +18,14 @@ export Relax
 export Init_sim
 export Run
 
-const μ₀ = pi * 4e-7 / 1e9 # vacuum permeability, = 4 * pi / 10
+const μ₀ = π * 4e-7 / 1e9 # vacuum permeability, = 4 * pi / 10
 const γ = 2.221e5
+
+struct Sim 
+    nx::Int
+    ny::Int
+    nz::Int
+end
 
  struct Mesh
     nx::Int
@@ -42,11 +48,27 @@ struct Demag{T<:CuArray{ComplexF32, 3}}
     fft::CUDA.CUFFT.rCuFFTPlan{Float32,-1,false,4}
 end
 
+struct Zeeman
+    nothing 
+end
+
+struct Exchange
+    nothing 
+end
+
+struct Anistropy 
+    nothing 
+end 
+
+struct DMI 
+    nothing 
+end 
+
+
 # TODO: Reduce as much as possible 
 struct Fields
     M_pad::CuArray{Float32, 4}
     M_fft::CuArray{ComplexF32, 4}
-    H_demag::CuArray{Float32, 4}
     H_demag_fft::CuArray{ComplexF32, 4}
     H_eff::CuArray{Float32, 4}
     M_x_H::CuArray{Float32, 4}

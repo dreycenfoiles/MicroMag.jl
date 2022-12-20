@@ -52,4 +52,8 @@ function Exchange!(H_eff, M, exch, mesh)
     return
 end
 
+function Effective_Field(H_eff, Exch)
+    nothing
+end
+
     
