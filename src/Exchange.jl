@@ -49,7 +49,7 @@ function Exchange!(H_eff, M, exch, mesh)
     # FIXME: Will error if nx >= 1024
     @cuda blocks=(3, nx) threads=(ny, nz) Exchange_kernel(H_eff, M, exch, nx, ny, nz, mesh.dx, mesh.dy, mesh.dz)
 
-    return
+    return 
 end
 
 function Effective_Field(H_eff, Exch)
