@@ -13,7 +13,7 @@ end
 # TODO: Periodic boundary conditions
 
 
-function Exchange_kernel(H_eff, M, exch, nx, ny, nz, dx, dy, dz)
+function Exchange_kernel!(Heff, M, exch, nx, ny, nz, dx, dy, dz)
 
     c = blockIdx().x 
     i = blockIdx().y
@@ -30,30 +30,29 @@ function Exchange_kernel(H_eff, M, exch, nx, ny, nz, dx, dy, dz)
     km1 = neumann_bc(k - 1, nz)
 
     laplace = (M[c, ip1, j, k] - 2 * M[c, i, j, k] + M[c, im1, j, k]) / (dx*dx) +
-              (M[c, i, jp1, k] - 2 * M[c, i, j, k] + M[c, i, jm1, k]) / (dy*dy) + 
-              (M[c, i, j, kp1] - 2 * M[c, i, j, k] + M[c, i, j, km1]) / (dz*dz)
+                        (M[c, i, jp1, k] - 2 * M[c, i, j, k] + M[c, i, jm1, k]) / (dy*dy) + 
+                        (M[c, i, j, kp1] - 2 * M[c, i, j, k] + M[c, i, j, km1]) / (dz*dz)
 
     laplace *= exch 
 
-    H_eff[c, i, j, k] += laplace
+    Heff[c, i, j, k] += laplace
 
     nothing
 end 
 
-function Exchange!(H_eff, M, exch, mesh)
+function Exchange!(Heff::CuArray{Float32, 4}, m::CuArray{Float32, 4}, mesh::Mesh, exch::Float64, t::Float64)
 
     nx = mesh.nx
     ny = mesh.ny
     nz = mesh.nz
 
     # FIXME: Will error if nx >= 1024
-    @cuda blocks=(3, nx) threads=(ny, nz) Exchange_kernel(H_eff, M, exch, nx, ny, nz, mesh.dx, mesh.dy, mesh.dz)
+    @cuda blocks=(3, nx) threads=(ny, nz) Exchange_kernel!(Heff, m, exch, nx, ny, nz, mesh.dx, mesh.dy, mesh.dz)
 
-    return 
+    nothing 
 end
 
-function Effective_Field(H_eff, Exch)
-    nothing
-end
+
+
 
     

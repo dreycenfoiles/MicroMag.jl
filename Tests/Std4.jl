@@ -6,8 +6,8 @@ using LinearAlgebra
 using DataFrames
 using CSV 
 
-nx = 166 # number of cells on x direction
-ny = 42
+nx = 10 # number of cells on x direction
+ny = 10
 nz = 1
 dx = 3. # cell volume = dd x dd x dd
 dy = 3. # cell volume = dd x dd x dd
@@ -17,22 +17,20 @@ alpha = 0.02; # damping constant to relax system to S-state
 A = 1.3E-11 / 1e9; # nanometer/nanosecond units
 Ms = 8e5 / 1e9; # saturation magnetization
 
-function B_ext(t)
-    return [-24.6e-3, 4.3e-3, 0.0]
-end
+mesh = Mesh(nx=nx, ny=ny, nz=nz, dx=dx, dy=dy, dz=dz)
 
-parameters = (Ms, A, alpha)
+p = Params(α=0.02, A=A, Ms=Ms, Bext=[-24.6e-3, 4.3e-3, 0.0])
 
 m0 = CUDA.zeros(Float32, 3, nx, ny, nz)
 m0[1, :, :, :] .= 1
 m0[2, :, :, :] .= .1
 # m0[3, :, :, :] .= 0
 
-p = Init_sim(m0, dx, dy, dz, Ms, A, alpha, B_ext)
+sim = InitSim(m0, mesh, p)
 
-m0 = Relax(m0, p)
+m0 = Relax(m0, sim)
 
-t, cpu_sol = Run(m0, 3, p)
+t, cpu_sol = Run(m0, sim, 3.)
 
 mx_vals = cpu_sol[1, 1:nx, 1:ny, 1:nz, :]
 my_vals = cpu_sol[2, 1:nx, 1:ny, 1:nz, :]
