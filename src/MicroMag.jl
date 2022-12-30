@@ -7,6 +7,7 @@ using DifferentialEquations
 using LinearAlgebra
 using PreallocationTools
 using Memoize
+using Parameters
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
@@ -52,6 +53,19 @@ struct Fields
     M_x_H::CuArray{Float32, 4}
 end
 
+@with_kw struct Params
+    Ms::Float64
+    A::Float64
+    α::Float64
+    B_ext::Function
+    exch::Float64 = 2 * A / μ₀ / Ms
+    prefactor1::Float64 = -γ / (1 + α * α)
+    prefactor2::Float64 = prefactor1 * α
+    relax_α::Float64 = 0.5 
+    relax_prefactor1::Float64 = -γ / (1 + relax_α * relax_α)
+    relax_prefactor2::Float64 = relax_prefactor1 * relax_α
+end
+
 include("Demag.jl")
 include("Exchange.jl")
 include("LLG.jl")
@@ -62,7 +76,7 @@ check_normalize!(m) = m ./= sqrt.(sum(m .^ 2, dims=1))
 
 # FIXME: Does converting to Float32 here improve performance?
 # TODO: Make α spatially dependent
-function Init_sim(m0::CuArray{Float32, 4}, dx::Float64, dy::Float64, dz::Float64, A::Float64, Ms::Float64, α::Float64, B_ext::Function)
+function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64, Ms::Float64, A::Float64, α::Float64, B_ext::Function)
     
 
     ### Initialize Mesh ###
@@ -103,11 +117,11 @@ function Init_sim(m0::CuArray{Float32, 4}, dx::Float64, dy::Float64, dz::Float64
 
     ### Initialize Parameters ###
 
-    param = (A, Ms, α)
+    params = Params(Ms=Ms, A=A, α=α, B_ext=B_ext)
 
     ##############################
 
-    return (mesh, fields, demag, param, B_ext)
+    return (mesh, fields, demag, params)
 end
 
 

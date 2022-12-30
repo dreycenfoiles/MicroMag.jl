@@ -21,8 +21,6 @@ function B_ext(t)
     return [-24.6e-3, 4.3e-3, 0.0]
 end
 
-parameters = (Ms, A, alpha)
-
 m0 = CUDA.zeros(Float32, 3, nx, ny, nz)
 m0[1, :, :, :] .= 1
 m0[2, :, :, :] .= .1
@@ -32,7 +30,7 @@ p = Init_sim(m0, dx, dy, dz, Ms, A, alpha, B_ext)
 
 m0 = Relax(m0, p)
 
-t, cpu_sol = Run(m0, 3, p)
+t, cpu_sol = Run(m0, 3., p)
 
 mx_vals = cpu_sol[1, 1:nx, 1:ny, 1:nz, :]
 my_vals = cpu_sol[2, 1:nx, 1:ny, 1:nz, :]
