@@ -16,8 +16,10 @@ global_logger(TerminalLogger())
 CUDA.allowscalar(false)
 
 export Relax
-export Init_sim
+export InitSim 
 export Run
+export Mesh 
+export Params
 
 const μ₀ = pi * 4e-7 / 1e9 # vacuum permeability, = 4 * pi / 10
 const γ = 2.221e5
@@ -64,8 +66,10 @@ include("Demag.jl")
 include("Exchange.jl")
 include("LLG.jl")
 include("Zeeman.jl")
+include("Init_m.jl")
 
-struct Sim 
+struct Sim
+    m::CuArray{Float32, 4} 
     mesh::Mesh
     params::Params
     demag::Demag
@@ -74,18 +78,17 @@ struct Sim
 end
 
 
-check_normalize!(m) = m ./= sqrt.(sum(m .^ 2, dims=1))
 
 # FIXME: Does converting to Float32 here improve performance?
 # TODO: Make α spatially dependent
-function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64, Ms::Float64, A::Float64, α::Float64, B_ext)
+function InitSim(init_m, mesh::Mesh, params::Params)
     
-
     ### Initialize Mesh ###
 
-    nc, nx, ny, nz = size(m0)
+    nx, ny, nz = mesh.nx, mesh.ny, mesh.nz
+    dx, dy, dz = mesh.dx, mesh.dy, mesh.dz
 
-    check_normalize!(m0)
+    m0 = Init_m(mesh, init_m)
 
     input_indices = CartesianIndices((3, nx, ny, nz))
     output_indices = CartesianIndices((3, nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)))
@@ -96,14 +99,14 @@ function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64,
 
     ### Initialize Empty Arrays ###
 
-    M_pad = CUDA.zeros(Float32, nc, nx * 2, ny * 2, nz * 2)
-    M_fft = CUDA.zeros(ComplexF32, nc, nx + 1, ny * 2, nz * 2)
+    M_pad = CUDA.zeros(Float32, 3, nx * 2, ny * 2, nz * 2)
+    M_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2, nz * 2)
 
-    H_demag = CUDA.zeros(Float32, nc, nx * 2, ny * 2, nz * 2)
-    H_demag_fft = CUDA.zeros(ComplexF32, nc, nx + 1, ny * 2, nz * 2)
+    H_demag = CUDA.zeros(Float32, 3, nx * 2, ny * 2, nz * 2)
+    H_demag_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2, nz * 2)
 
-    H_eff = CUDA.zeros(Float32, nc, nx, ny, nz)
-    M_x_H = CUDA.zeros(Float32, nc, nx, ny, nz)
+    H_eff = CUDA.zeros(Float32, 3, nx, ny, nz)
+    M_x_H = CUDA.zeros(Float32, 3, nx, ny, nz)
 
     ################################
 
@@ -115,51 +118,44 @@ function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64,
 
     ################################
 
-    ### Initialize Parameters ###
 
-    params = Params(Ms=Ms, A=A, α=α, B_ext=B_ext)
-
-    ##############################
-
-    return Sim(mesh, params, demag, H_eff, M_x_H)
+    return Sim(m0, mesh, params, demag, H_eff, M_x_H)
 end
 
 
-function Relax(m0, p)
+function Relax(sim::Sim)
     # prob = SteadyStateProblem(LLG_loop!, m0, p)
-    new_p = (p, true)
+    p = (sim, true)
     cb = TerminateSteadyState(1, 1)
     end_point = 4
     tspan = (0, end_point)
     t_points = range(0, end_point, length=600)
-    prob = ODEProblem(LLG_loop!, m0, tspan, new_p)
+    prob = ODEProblem(LLG_loop!, sim.m, tspan, p)
     # saveat=2000 if memory becomes an issue
     sol = solve(prob, OwrenZen3(), progress=true, abstol=1e-3, reltol=1e-3, callback=cb, saveat=t_points, dt=1e-3)
 
     # cpu_sol = cat([Array(x) for x in sol.u]..., dims=5)
 
-    return sol.u[end]
+    sim.m .= sol.u[end]
+
+    nothing 
 end
 
-function Run(m0,t,p)
+function Run(sim::Sim, t)
 
-    new_p = (p, false)
+    new_p = (sim, false)
     
     # TODO: Convert to nice units
     end_point = t
     tspan = (0, end_point)
     t_points = range(0, end_point, length=300)
 
-    prob = ODEProblem(LLG_loop!, m0, tspan, new_p)
+    prob = ODEProblem(LLG_loop!, sim.m, tspan, new_p)
     sol = solve(prob, OwrenZen3(), progress=true, progress_steps=1000, abstol=1e-3, reltol=1e-3, saveat=t_points, dt=1e-3)
 
     cpu_sol = cat([Array(x) for x in sol.u]..., dims=5)
 
     return sol.t, cpu_sol
 end
-
-# normalize_llg!(integrator) = check_normalize!(integrator.u)
-# condition(u, t, integrator) = true
-
 
 end # module MicroMag.jl

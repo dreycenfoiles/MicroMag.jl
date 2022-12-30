@@ -17,18 +17,18 @@ alpha = 0.02; # damping constant to relax system to S-state
 A = 1.3E-11 / 1e9; # nanometer/nanosecond units
 Ms = 8e5 / 1e9; # saturation magnetization
 
-Bext = [-24.6e-3, 4.3e-3, 0.0]
+B_ext = [-24.6e-3, 4.3e-3, 0.0]
 
-m0 = CUDA.zeros(Float32, 3, nx, ny, nz)
-m0[1, :, :, :] .= 1
-m0[2, :, :, :] .= .1
-# m0[3, :, :, :] .= 0
+init_m = [1., .1, 0]
 
-p = Init_sim(m0, dx, dy, dz, Ms, A, alpha, Bext)
+mesh = Mesh(nx, ny, nz, dx, dy, dz)
+params = Params(A=A, Ms=Ms, α=alpha, B_ext=B_ext)
 
-m0 = Relax(m0, p)
+p = InitSim(init_m, mesh, params)
 
-t, cpu_sol = Run(m0, 3., p)
+Relax(p)
+
+t, cpu_sol = Run(p, 3.)
 
 mx_vals = cpu_sol[1, 1:nx, 1:ny, 1:nz, :]
 my_vals = cpu_sol[2, 1:nx, 1:ny, 1:nz, :]

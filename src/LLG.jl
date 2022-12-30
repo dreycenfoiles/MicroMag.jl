@@ -4,7 +4,6 @@ function LLG_loop!(dm, m0, p, t)
     sim, relax = p
 
     Demag!(sim.H_eff, m0, sim.demag, sim.params.Ms)
-
     Exchange!(sim.H_eff, m0, sim.params.exch, sim.mesh)
 
     if !relax
