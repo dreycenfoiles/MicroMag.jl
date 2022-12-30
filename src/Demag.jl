@@ -1,4 +1,5 @@
-using FFTW 
+using FFTW
+using Memoize
 
 # Yoshinobu Nakatani et al 1989 Jpn. J. Appl. Phys. 28 2485
 
@@ -64,32 +65,26 @@ using FFTW
 
 end
 
-function Demag!(H_eff, M_pad, M_fft, H_demag, H_demag_fft, fft_plans, Mx_kernels, My_kernels, Mz_kernels, output_indices)
+function Demag!(H_eff::CuArray{Float32,4}, m0::CuArray{Float32,4}, demag::Demag, Ms::Float64)
 
-    Kxx_fft, Kxy_fft, Kxz_fft = Mx_kernels
-    Kxy_fft, Kyy_fft, Kyz_fft = My_kernels
-    Kxz_fft, Kyz_fft, Kzz_fft = Mz_kernels
+    fill!(demag.M_pad, 0)
+    @inbounds demag.M_pad[demag.in] = m0 .* Ms
 
-    plan, iplan = fft_plans
+    mul!(demag.M_fft, demag.fft, demag.M_pad)
 
-    mul!(M_fft, plan, M_pad)
+    Mx_fft = @view demag.M_fft[1, :, :, :]
+    My_fft = @view demag.M_fft[2, :, :, :]
+    Mz_fft = @view demag.M_fft[3, :, :, :]
 
-    Mx_fft = @view M_fft[1, :, :, :]
-    My_fft = @view M_fft[2, :, :, :]
-    Mz_fft = @view M_fft[3, :, :, :]
+    @. demag.H_demag_fft[1, :, :, :] = Mx_fft * demag.Kxx_fft + My_fft * demag.Kxy_fft + Mz_fft * demag.Kxz_fft
+    @. demag.H_demag_fft[2, :, :, :] = Mx_fft * demag.Kxy_fft + My_fft * demag.Kyy_fft + Mz_fft * demag.Kyz_fft
+    @. demag.H_demag_fft[3, :, :, :] = Mx_fft * demag.Kxz_fft + My_fft * demag.Kyz_fft + Mz_fft * demag.Kzz_fft
 
-    @. H_demag_fft[1, :, :, :] = Mx_fft * Kxx_fft + My_fft * Kxy_fft + Mz_fft * Kxz_fft
-    @. H_demag_fft[2, :, :, :] = Mx_fft * Kxy_fft + My_fft * Kyy_fft + Mz_fft * Kyz_fft
-    @. H_demag_fft[3, :, :, :] = Mx_fft * Kxz_fft + My_fft * Kyz_fft + Mz_fft * Kzz_fft
+    ldiv!(demag.H_demag, demag.fft, demag.H_demag_fft)
 
-    mul!(H_demag, iplan, H_demag_fft)
-
-    @inbounds H_eff .= real(H_demag[output_indices]) # truncation of demag field
+    @inbounds H_eff .= real.(demag.H_demag[demag.out]) # truncation of demag field
 
     nothing
 end
-
-
-Kxx, Kyy, Kzz, Kxy, Kxz, Kyz = Demag_Kernel(2, 2, 2, 2e-9, 2e-9, 2e-9)
 
 

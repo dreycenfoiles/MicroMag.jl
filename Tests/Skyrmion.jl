@@ -4,14 +4,14 @@ using CUDA
 using Plots
 using LinearAlgebra
 using DataFrames
-using CSV 
+using CSV
 
 nx = 166 # number of cells on x direction
 ny = 42
 nz = 1
-dx = 3. # cell volume = dd x dd x dd
-dy = 3. # cell volume = dd x dd x dd
-dz = 3. # cell volume = dd x dd x dd
+dx = 3.0 # cell volume = dd x dd x dd
+dy = 3.0 # cell volume = dd x dd x dd
+dz = 3.0 # cell volume = dd x dd x dd
 
 alpha = 0.02; # damping constant to relax system to S-state
 A = 1.3E-11 / 1e9; # nanometer/nanosecond units
@@ -19,7 +19,17 @@ Ms = 8e5 / 1e9; # saturation magnetization
 
 B_ext = [-24.6e-3, 4.3e-3, 0.0]
 
-init_m = [1., .1, 0]
+function skyrmion(x, y, z)
+
+    r = sqrt(x^2 + y^2)
+    if r < 10
+        return [0.0, 0.0, -1.0]
+    else
+        return [0.0, 0.0, 1.]
+    end    
+end
+
+
 
 mesh = Mesh(nx, ny, nz, dx, dy, dz)
 params = Params(A=A, Ms=Ms, α=alpha, B_ext=B_ext)
@@ -28,7 +38,7 @@ p = InitSim(init_m, mesh, params)
 
 Relax(p)
 
-t, cpu_sol = Run(p, 3.)
+t, cpu_sol = Run(p, 3.0)
 
 mx_vals = cpu_sol[1, 1:nx, 1:ny, 1:nz, :]
 my_vals = cpu_sol[2, 1:nx, 1:ny, 1:nz, :]
