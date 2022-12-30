@@ -29,8 +29,6 @@ const γ = 2.221e5
     dx::Float32
     dy::Float32
     dz::Float32
-    in::CartesianIndices{4}
-    out::CartesianIndices{4}
 end
 
 struct Demag{T<:CuArray{ComplexF32, 3}}
@@ -41,23 +39,19 @@ struct Demag{T<:CuArray{ComplexF32, 3}}
     Kxz_fft::T
     Kyz_fft::T
     fft::CUDA.CUFFT.rCuFFTPlan{Float32,-1,false,4}
-end
-
-# TODO: Reduce as much as possible 
-struct Fields
     M_pad::CuArray{Float32, 4}
     M_fft::CuArray{ComplexF32, 4}
     H_demag::CuArray{Float32, 4}
     H_demag_fft::CuArray{ComplexF32, 4}
-    H_eff::CuArray{Float32, 4}
-    M_x_H::CuArray{Float32, 4}
+    in::CartesianIndices{4}
+    out::CartesianIndices{4}
 end
 
 @with_kw struct Params
     Ms::Float64
     A::Float64
     α::Float64
-    B_ext::Function
+    B_ext::Vector{Float64}
     exch::Float64 = 2 * A / μ₀ / Ms
     prefactor1::Float64 = -γ / (1 + α * α)
     prefactor2::Float64 = prefactor1 * α
@@ -71,12 +65,20 @@ include("Exchange.jl")
 include("LLG.jl")
 include("Zeeman.jl")
 
+struct Sim 
+    mesh::Mesh
+    params::Params
+    demag::Demag
+    H_eff::CuArray{Float32, 4}
+    M_x_H::CuArray{Float32, 4}
+end
+
 
 check_normalize!(m) = m ./= sqrt.(sum(m .^ 2, dims=1))
 
 # FIXME: Does converting to Float32 here improve performance?
 # TODO: Make α spatially dependent
-function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64, Ms::Float64, A::Float64, α::Float64, B_ext::Function)
+function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64, Ms::Float64, A::Float64, α::Float64, B_ext)
     
 
     ### Initialize Mesh ###
@@ -88,7 +90,7 @@ function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64,
     input_indices = CartesianIndices((3, nx, ny, nz))
     output_indices = CartesianIndices((3, nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)))
    
-    mesh = Mesh(nx, ny, nz, dx, dy, dz, input_indices, output_indices)
+    mesh = Mesh(nx, ny, nz, dx, dy, dz)
 
     ########################
 
@@ -103,15 +105,13 @@ function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64,
     H_eff = CUDA.zeros(Float32, nc, nx, ny, nz)
     M_x_H = CUDA.zeros(Float32, nc, nx, ny, nz)
 
-    fields = Fields(M_pad, M_fft, H_demag, H_demag_fft, H_eff, M_x_H)
     ################################
-
 
     ### Initialize Demag Kernel ###
 
     plan = plan_rfft(M_pad, [2, 3, 4])
 
-    demag = Demag(Demag_Kernel(nx, ny, nz, dx, dy, dz)...,plan)
+    demag = Demag(Demag_Kernel(nx, ny, nz, dx, dy, dz)..., plan, M_pad, M_fft, H_demag, H_demag_fft, input_indices, output_indices)
 
     ################################
 
@@ -121,13 +121,13 @@ function Init_sim(m0::CuArray{Float32,4}, dx::Float64, dy::Float64, dz::Float64,
 
     ##############################
 
-    return (mesh, fields, demag, params)
+    return Sim(mesh, params, demag, H_eff, M_x_H)
 end
 
 
 function Relax(m0, p)
     # prob = SteadyStateProblem(LLG_loop!, m0, p)
-    new_p = (p..., true)
+    new_p = (p, true)
     cb = TerminateSteadyState(1, 1)
     end_point = 4
     tspan = (0, end_point)
@@ -143,7 +143,7 @@ end
 
 function Run(m0,t,p)
 
-    new_p = (p..., false)
+    new_p = (p, false)
     
     # TODO: Convert to nice units
     end_point = t

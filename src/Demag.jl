@@ -65,21 +65,24 @@ using Memoize
 
 end
 
-function Demag!(fields::Fields, demag::Demag, mesh::Mesh)
+function Demag!(H_eff::CuArray{Float32,4}, m0::CuArray{Float32,4}, demag::Demag, Ms::Float64)
 
-    mul!(fields.M_fft, demag.fft, fields.M_pad)
+    fill!(demag.M_pad, 0)
+    @inbounds demag.M_pad[demag.in] = m0 .* Ms
 
-    Mx_fft = @view fields.M_fft[1, :, :, :]
-    My_fft = @view fields.M_fft[2, :, :, :]
-    Mz_fft = @view fields.M_fft[3, :, :, :]
+    mul!(demag.M_fft, demag.fft, demag.M_pad)
 
-    @. fields.H_demag_fft[1, :, :, :] = Mx_fft * demag.Kxx_fft + My_fft * demag.Kxy_fft + Mz_fft * demag.Kxz_fft
-    @. fields.H_demag_fft[2, :, :, :] = Mx_fft * demag.Kxy_fft + My_fft * demag.Kyy_fft + Mz_fft * demag.Kyz_fft
-    @. fields.H_demag_fft[3, :, :, :] = Mx_fft * demag.Kxz_fft + My_fft * demag.Kyz_fft + Mz_fft * demag.Kzz_fft
+    Mx_fft = @view demag.M_fft[1, :, :, :]
+    My_fft = @view demag.M_fft[2, :, :, :]
+    Mz_fft = @view demag.M_fft[3, :, :, :]
 
-    ldiv!(fields.H_demag, demag.fft, fields.H_demag_fft)
+    @. demag.H_demag_fft[1, :, :, :] = Mx_fft * demag.Kxx_fft + My_fft * demag.Kxy_fft + Mz_fft * demag.Kxz_fft
+    @. demag.H_demag_fft[2, :, :, :] = Mx_fft * demag.Kxy_fft + My_fft * demag.Kyy_fft + Mz_fft * demag.Kyz_fft
+    @. demag.H_demag_fft[3, :, :, :] = Mx_fft * demag.Kxz_fft + My_fft * demag.Kyz_fft + Mz_fft * demag.Kzz_fft
 
-    @inbounds fields.H_eff .= real.(fields.H_demag[mesh.out]) # truncation of demag field
+    ldiv!(demag.H_demag, demag.fft, demag.H_demag_fft)
+
+    @inbounds H_eff .= real.(demag.H_demag[demag.out]) # truncation of demag field
 
     nothing
 end

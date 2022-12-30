@@ -1,36 +1,25 @@
 
 function LLG_loop!(dm, m0, p, t)
 
-    mesh, fields, demag, params, relax = p
+    sim, relax = p
 
-    #################
-    ## Demag Field ##
-    #################
+    Demag!(sim.H_eff, m0, sim.demag, sim.params.Ms)
 
-    fill!(fields.M_pad, 0)
-    @inbounds fields.M_pad[mesh.in] = m0 .* params.Ms
-
-    Demag!(fields, demag, mesh)
-
-    ####################
-    ## Exchange Field ##
-    ####################
-
-    Exchange!(fields.H_eff, m0, params.exch, mesh)
+    Exchange!(sim.H_eff, m0, sim.params.exch, sim.mesh)
 
     if !relax
-        Zeeman!(fields.H_eff, params.B_ext(t))
+        Zeeman!(sim.H_eff, sim.params.B_ext, t)
     end
 
     # apply LLG equation
-    cross!(fields.M_x_H, m0, fields.H_eff)
-    cross!(dm, m0, fields.M_x_H)
+    cross!(sim.M_x_H, m0, sim.H_eff)
+    cross!(dm, m0, sim.M_x_H)
 
     if relax
-        dm .*= params.relax_prefactor2
+        dm .*= sim.params.relax_prefactor2
     else
-        dm .*= params.prefactor2
-        @. dm += params.prefactor1 * fields.M_x_H
+        dm .*= sim.params.prefactor2
+        @. dm += sim.params.prefactor1 * sim.M_x_H
     end
 
     nothing
