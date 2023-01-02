@@ -82,7 +82,7 @@ function Demag!(H_eff::CuArray{Float32,4}, m0::CuArray{Float32,4}, demag::Demag,
 
     ldiv!(demag.H_demag, demag.fft, demag.H_demag_fft)
 
-    @inbounds H_eff .= real.(demag.H_demag[demag.out]) # truncation of demag field
+    @inbounds H_eff .+= demag.H_demag[demag.out] # truncation of demag field
 
     nothing
 end
