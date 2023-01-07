@@ -36,9 +36,9 @@ mx_vals = cpu_sol[1, ..]
 my_vals = cpu_sol[2, ..]
 mz_vals = cpu_sol[3, ..]
 
-mx_avg = mean(mx_vals, dims=[1, 2, 3])[1, 1, 1, :]
-my_avg = mean(my_vals, dims=[1, 2, 3])[1, 1, 1, :]
-mz_avg = mean(mz_vals, dims=[1, 2, 3])[1, 1, 1, :]
+mx_avg = mean(mx_vals, dims=[1, 2])[1, 1, :]
+my_avg = mean(my_vals, dims=[1, 2])[1, 1, :]
+mz_avg = mean(mz_vals, dims=[1, 2])[1, 1, :]
 
 plot(t, mx_avg, label="mx")
 plot!(t, my_avg, label="my")
