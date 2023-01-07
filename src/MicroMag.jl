@@ -35,7 +35,22 @@ const γ::Float32 = 2.221e5
     dz::Float32
 end
 
-struct Demag{T<:CuArray{ComplexF32, 3}}
+
+struct Demag2D{T<:CuArray{ComplexF32,2}}
+    Kxx_fft::T
+    Kyy_fft::T
+    Kzz_fft::T
+    Kxy_fft::T
+    fft::CUDA.CUFFT.rCuFFTPlan{Float32,-1,false,3}
+    M_pad::CuArray{Float32,3}
+    M_fft::CuArray{ComplexF32,3}
+    H_demag::CuArray{Float32,3}
+    H_demag_fft::CuArray{ComplexF32,3}
+    in::CartesianIndices{3}
+    out::CartesianIndices{3}
+end
+
+struct Demag3D{T<:CuArray{ComplexF32, 3}}
     Kxx_fft::T
     Kyy_fft::T
     Kzz_fft::T
@@ -71,12 +86,12 @@ include("Zeeman.jl")
 include("Init_m.jl")
 
 struct Sim
-    m::CuArray{Float32, 4} 
+    m::CuArray{Float32} 
     mesh::Mesh
     params::Params
-    demag::Demag
-    H_eff::CuArray{Float32, 4}
-    M_x_H::CuArray{Float32, 4}
+    demag::Union{Demag2D, Demag3D}
+    H_eff::CuArray{Float32}
+    M_x_H::CuArray{Float32}
 end
 
 
@@ -92,34 +107,68 @@ function InitSim(init_m, mesh::Mesh, params::Params)::Sim
 
     m0 = Init_m(mesh, init_m)
 
-    input_indices = CartesianIndices((3, nx, ny, nz))
-    output_indices = CartesianIndices((3, nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)))
-   
-    ########################
+    if nz == 1
 
-    ### Initialize Empty Arrays ###
+        input_indices = CartesianIndices((3, nx, ny))
+        output_indices = CartesianIndices((3, nx:(2*nx-1), ny:(2*ny-1)))
 
-    M_pad = CUDA.zeros(Float32, 3, nx * 2, ny * 2, nz * 2)
-    M_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2, nz * 2)
+        ########################
 
-    H_demag = CUDA.zeros(Float32, 3, nx * 2, ny * 2, nz * 2)
-    H_demag_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2, nz * 2)
+        ### Initialize Empty Arrays ###
 
-    H_eff = CUDA.zeros(Float32, 3, nx, ny, nz)
-    M_x_H = CUDA.zeros(Float32, 3, nx, ny, nz)
+        M_pad = CUDA.zeros(Float32, 3, nx * 2, ny * 2)
+        M_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2)
 
-    ################################
+        H_demag = CUDA.zeros(Float32, 3, nx * 2, ny * 2)
+        H_demag_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2)
 
-    ### Initialize Demag Kernel ###
+        H_eff = CUDA.zeros(Float32, 3, nx, ny)
+        M_x_H = CUDA.zeros(Float32, 3, nx, ny)
 
-    plan = plan_rfft(M_pad, [2, 3, 4])
+        ################################
 
-    demag = Demag(Demag_Kernel(nx, ny, nz, dx, dy, dz)..., plan, M_pad, M_fft, H_demag, H_demag_fft, input_indices, output_indices)
+        ### Initialize Demag Kernel ###
 
-    ################################
+        plan = plan_rfft(M_pad, [2, 3])
+
+        demag = Demag2D(Demag_Kernel(nx, ny, nz, dx, dy, dz)..., plan, M_pad, M_fft, H_demag, H_demag_fft, input_indices, output_indices)
+
+        ################################
 
 
-    return Sim(m0, mesh, params, demag, H_eff, M_x_H)
+        return Sim(m0, mesh, params, demag, H_eff, M_x_H)
+
+    else 
+
+        input_indices = CartesianIndices((3, nx, ny, nz))
+        output_indices = CartesianIndices((3, nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)))
+    
+        ########################
+
+        ### Initialize Empty Arrays ###
+
+        M_pad = CUDA.zeros(Float32, 3, nx * 2, ny * 2, nz * 2)
+        M_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2, nz * 2)
+
+        H_demag = CUDA.zeros(Float32, 3, nx * 2, ny * 2, nz * 2)
+        H_demag_fft = CUDA.zeros(ComplexF32, 3, nx + 1, ny * 2, nz * 2)
+
+        H_eff = CUDA.zeros(Float32, 3, nx, ny, nz)
+        M_x_H = CUDA.zeros(Float32, 3, nx, ny, nz)
+
+        ################################
+
+        ### Initialize Demag Kernel ###
+
+        plan = plan_rfft(M_pad, [2, 3, 4])
+
+        demag = Demag3D(Demag_Kernel(nx, ny, nz, dx, dy, dz)..., plan, M_pad, M_fft, H_demag, H_demag_fft, input_indices, output_indices)
+
+        ################################
+
+
+        return Sim(m0, mesh, params, demag, H_eff, M_x_H)
+    end
 end
 
 
@@ -150,13 +199,12 @@ function Run(sim::Sim, t)
     tspan = (0, end_point)
     t_points = range(0, end_point, length=300)
 
-    # dm = similar(sim.m)
-    # @benchmark @CUDA.sync LLG_loop!(dm, sim.m, new_p, 0)
-
     prob = ODEProblem(LLG_loop!, sim.m, tspan, new_p)
     sol = solve(prob, OwrenZen3(), progress=true, progress_steps=1000, abstol=1e-3, reltol=1e-3, saveat=t_points, dt=1e-3)
 
-    cpu_sol = cat([Array(x) for x in sol.u]..., dims=5)
+    last_dim = length(size(sim.m))
+
+    cpu_sol = cat([Array(x) for x in sol.u]..., dims=last_dim+1)
 
     return sol.t, cpu_sol
 end
