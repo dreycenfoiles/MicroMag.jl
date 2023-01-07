@@ -14,9 +14,9 @@ using Memoize
     Kyz_cpu = zeros(2 * nx, 2 * ny, 2 * nz)
     Kzz_cpu = zeros(2 * nx, 2 * ny, 2 * nz)
 
-    @inbounds @simd for K = -nz+1:nz-1 # Calculation of Demag tensor
-        for J = -ny+1:ny-1
-            for I = -nx+1:nx-1
+    @inbounds @simd for K = -nz+1:nz # Calculation of Demag tensor
+        for J = -ny+1:ny
+            for I = -nx+1:nx
                 L = I + nx # shift the indices, b/c no negative index allowed in Julia
                 M = J + ny
                 N = K + nz
@@ -65,7 +65,7 @@ using Memoize
 
 end
 
-function Demag!(H_eff::CuArray{Float32,4}, m0::CuArray{Float32,4}, demag::Demag, Ms::Float64)
+function Demag!(H_eff::CuArray{Float32,4}, m0::CuArray{Float32,4}, demag::Demag, Ms::Float32)
 
     fill!(demag.M_pad, 0)
     @inbounds demag.M_pad[demag.in] = m0 .* Ms

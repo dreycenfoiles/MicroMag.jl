@@ -8,6 +8,8 @@ using LinearAlgebra
 using PreallocationTools
 using Memoize
 using Parameters
+using BenchmarkTools
+using EllipsisNotation
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
@@ -21,8 +23,8 @@ export Run
 export Mesh 
 export Params
 
-const μ₀ = pi * 4e-7 / 1e9 # vacuum permeability, = 4 * pi / 10
-const γ = 2.221e5
+const μ₀::Float32 = pi * 4e-7 / 1e9 # vacuum permeability, = 4 * pi / 10
+const γ::Float32 = 2.221e5
 
  struct Mesh
     nx::Int
@@ -50,16 +52,16 @@ struct Demag{T<:CuArray{ComplexF32, 3}}
 end
 
 @with_kw struct Params
-    Ms::Float64
-    A::Float64
-    α::Float64
-    B_ext::Vector{Float64}
-    exch::Float64 = 2 * A / μ₀ / Ms
-    prefactor1::Float64 = -γ / (1 + α * α)
-    prefactor2::Float64 = prefactor1 * α
-    relax_α::Float64 = 0.5 
-    relax_prefactor1::Float64 = -γ / (1 + relax_α * relax_α)
-    relax_prefactor2::Float64 = relax_prefactor1 * relax_α
+    Ms::Float32
+    A::Float32
+    α::Float32
+    B_ext::Vector{Float32}
+    exch::Float32 = 2 * A / μ₀ / Ms
+    prefactor1::Float32 = -γ / (1 + α * α)
+    prefactor2::Float32 = prefactor1 * α
+    relax_α::Float32 = 0.5 
+    relax_prefactor1::Float32 = -γ / (1 + relax_α * relax_α)
+    relax_prefactor2::Float32 = relax_prefactor1 * relax_α
 end
 
 include("Demag.jl")
@@ -81,7 +83,7 @@ end
 
 # FIXME: Does converting to Float32 here improve performance?
 # TODO: Make α spatially dependent
-function InitSim(init_m, mesh::Mesh, params::Params)
+function InitSim(init_m, mesh::Mesh, params::Params)::Sim
     
     ### Initialize Mesh ###
 
@@ -93,8 +95,6 @@ function InitSim(init_m, mesh::Mesh, params::Params)
     input_indices = CartesianIndices((3, nx, ny, nz))
     output_indices = CartesianIndices((3, nx:(2*nx-1), ny:(2*ny-1), nz:(2*nz-1)))
    
-    mesh = Mesh(nx, ny, nz, dx, dy, dz)
-
     ########################
 
     ### Initialize Empty Arrays ###
@@ -149,6 +149,9 @@ function Run(sim::Sim, t)
     end_point = t
     tspan = (0, end_point)
     t_points = range(0, end_point, length=300)
+
+    # dm = similar(sim.m)
+    # @benchmark @CUDA.sync LLG_loop!(dm, sim.m, new_p, 0)
 
     prob = ODEProblem(LLG_loop!, sim.m, tspan, new_p)
     sol = solve(prob, OwrenZen3(), progress=true, progress_steps=1000, abstol=1e-3, reltol=1e-3, saveat=t_points, dt=1e-3)

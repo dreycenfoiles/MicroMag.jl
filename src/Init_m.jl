@@ -2,7 +2,7 @@
 
 check_normalize!(m) = m ./= sqrt.(sum(m .^ 2, dims=1))
 
-function Init_m(mesh::Mesh, init::Vector{Float64})
+function Init_m(mesh::Mesh, init::Vector{Float32})
 
     m0 = CUDA.zeros(Float32, 3, mesh.nx, mesh.ny, mesh.nz)
 

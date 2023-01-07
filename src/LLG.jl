@@ -30,17 +30,17 @@ end
 
 function cross!(product, A, B)
 
-    Ax = @views A[1, :, :, :]
-    Ay = @views A[2, :, :, :]
-    Az = @views A[3, :, :, :]
+    Ax = @views A[1, ..]
+    Ay = @views A[2, ..]
+    Az = @views A[3, ..]
 
-    Bx = @views B[1, :, :, :]
-    By = @views B[2, :, :, :]
-    Bz = @views B[3, :, :, :]
+    Bx = @views B[1, ..]
+    By = @views B[2, ..]
+    Bz = @views B[3, ..]
 
-    @. @views product[1, :, :, :] = Ay * Bz - Az * By
-    @. @views product[2, :, :, :] = Az * Bx - Ax * Bz
-    @. @views product[3, :, :, :] = Ax * By - Ay * Bx
+    @. @views product[1, ..] = Ay * Bz - Az * By
+    @. @views product[2, ..] = Az * Bx - Ax * Bz
+    @. @views product[3, ..] = Ax * By - Ay * Bx
 
     nothing
 end

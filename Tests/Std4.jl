@@ -5,6 +5,8 @@ using Plots
 using LinearAlgebra
 using DataFrames
 using CSV 
+using EllipsisNotation
+
 
 nx = 166 # number of cells on x direction
 ny = 42
@@ -19,7 +21,7 @@ Ms = 8e5 / 1e9; # saturation magnetization
 
 B_ext = [-24.6e-3, 4.3e-3, 0.0]
 
-init_m = [1., .1, 0]
+init_m = [1f0, .1f0, 0f0]
 
 mesh = Mesh(nx, ny, nz, dx, dy, dz)
 params = Params(A=A, Ms=Ms, α=alpha, B_ext=B_ext)
@@ -30,9 +32,9 @@ Relax(p)
 
 t, cpu_sol = Run(p, 3.)
 
-mx_vals = cpu_sol[1, 1:nx, 1:ny, 1:nz, :]
-my_vals = cpu_sol[2, 1:nx, 1:ny, 1:nz, :]
-mz_vals = cpu_sol[3, 1:nx, 1:ny, 1:nz, :]
+mx_vals = cpu_sol[1, ..]
+my_vals = cpu_sol[2, ..]
+mz_vals = cpu_sol[3, ..]
 
 mx_avg = mean(mx_vals, dims=[1, 2, 3])[1, 1, 1, :]
 my_avg = mean(my_vals, dims=[1, 2, 3])[1, 1, 1, :]
