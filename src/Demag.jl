@@ -120,7 +120,7 @@ end
 function Demag!(H_eff::CuArray{Float32,3}, m0::CuArray{Float32,3}, demag::Demag2D, Ms::Float32)
 
     fill!(demag.M_pad, 0)
-    @inbounds demag.M_pad[demag.in] = m0 .* Ms
+    @. @inbounds demag.M_pad[demag.in] = m0 * Ms
 
     mul!(demag.M_fft, demag.fft, demag.M_pad)
 

@@ -96,7 +96,6 @@ end
 
 
 
-# FIXME: Does converting to Float32 here improve performance?
 # TODO: Make α spatially dependent
 function InitSim(init_m, mesh::Mesh, params::Params)::Sim
     

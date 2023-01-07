@@ -1,5 +1,5 @@
 
-function LLG_loop!(dm, m0, p, t)
+function LLG_loop!(dm::T, m0::T, p::Tuple{Sim,Bool}, t::Float64) where {T<:CuArray{Float32}}
 
     sim, relax = p
 
@@ -28,7 +28,7 @@ function LLG_loop!(dm, m0, p, t)
 end
 
 
-function cross!(product, A, B)
+function cross!(product::T, A::T, B::T) where {T<:CuArray{Float32}}
 
     Ax = @views A[1, ..]
     Ay = @views A[2, ..]
