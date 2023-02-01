@@ -1,30 +1,38 @@
 
-function LLG_loop!(dm::T, m0::T, p::Tuple{Sim,Bool}, t::Float64) where {T<:CuArray{Float32}}
-
-    sim, relax = p
+function LLG_relax!(dm::T, m::T, sim::Sim, t) where {T<:CuArray{Float32}}
 
     fill!(sim.H_eff, 0.)
 
-    Demag!(sim.H_eff, m0, sim.demag, sim.params.Ms)
-    Exchange!(sim.H_eff, m0, sim.params.exch, sim.mesh)
-
-    if !relax
-        Zeeman!(sim.H_eff, sim.params.B_ext, t)
+    for interaction in sim.Interactions
+        interaction(sim.H_eff, m, t)
     end
 
     # apply LLG equation
-    cross!(sim.M_x_H, m0, sim.H_eff)
-    cross!(dm, m0, sim.M_x_H)
+    cross!(sim.M_x_H, m, sim.H_eff)
+    cross!(dm, m, sim.M_x_H)
 
-    if relax
-        dm .*= sim.params.relax_prefactor2
-    else
-        dm .*= sim.params.prefactor2
-        @. dm += sim.params.prefactor1 * sim.M_x_H
-    end
+    dm .*= sim.relax_prefactor2
 
     nothing
+end
 
+
+function LLG_run!(dm::T, m::T, sim::Sim, t) where {T<:CuArray{Float32}}
+
+    fill!(sim.H_eff, 0.)
+
+    for interaction in sim.Interactions
+        interaction(sim.H_eff, m, t)
+    end
+
+    # apply LLG equation
+    cross!(sim.M_x_H, m, sim.H_eff)
+    cross!(dm, m, sim.M_x_H)
+
+    dm .*= sim.prefactor2
+    @. dm += sim.prefactor1 * sim.M_x_H
+
+    nothing
 end
 
 

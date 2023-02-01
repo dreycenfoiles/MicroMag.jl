@@ -5,19 +5,19 @@ using Memoize
 
 @memoize function Demag_Kernel(nx, ny, nz, dx, dy, dz)
 
-    prefactor = 1 / 4 / pi
+    prefactor = 1 / (4*π)
 
-    if nz == 1 
+    if nz == 1
 
         Kxx_cpu = zeros(2 * nx, 2 * ny)
         Kxy_cpu = zeros(2 * nx, 2 * ny)
         Kyy_cpu = zeros(2 * nx, 2 * ny)
         Kzz_cpu = zeros(2 * nx, 2 * ny)
 
-        K = 0 
+        K = 0
 
         # Calculation of Demag tensor
-        @inbounds @simd for J = -ny+1:ny
+        for J = -ny+1:ny
             for I = -nx+1:nx
                 L = I + nx # shift the indices, b/c no negative index allowed in Julia
                 M = J + ny
@@ -53,9 +53,13 @@ using Memoize
         Kyy_fft = CuArray{ComplexF32}(Kyy_fft_cpu)
         Kzz_fft = CuArray{ComplexF32}(Kzz_fft_cpu)
 
-        return Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft
+        # Dummy arrays that serve as place holders but are never used in 2D simulations
+        Kxz_fft = similar(Kxx_fft)
+        Kyz_fft = similar(Kxx_fft)
 
-    else 
+        return Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft
+
+    else
 
         Kxx_cpu = zeros(2 * nx, 2 * ny, 2 * nz)
         Kxy_cpu = zeros(2 * nx, 2 * ny, 2 * nz)
@@ -64,7 +68,7 @@ using Memoize
         Kyz_cpu = zeros(2 * nx, 2 * ny, 2 * nz)
         Kzz_cpu = zeros(2 * nx, 2 * ny, 2 * nz)
 
-        @inbounds @simd for K = -nz+1:nz # Calculation of Demag tensor
+        for K = -nz+1:nz # Calculation of Demag tensor
             for J = -ny+1:ny
                 for I = -nx+1:nx
                     L = I + nx # shift the indices, b/c no negative index allowed in Julia
@@ -114,13 +118,29 @@ using Memoize
         return Kxx_fft, Kyy_fft, Kzz_fft, Kxy_fft, Kxz_fft, Kyz_fft
 
     end
-
 end
 
-function Demag!(H_eff::CuArray{Float32,3}, m0::CuArray{Float32,3}, demag::Demag2D, Ms::Float32)
+struct Demag{T<:CuArray{ComplexF32}} <: AbstractField
+    Ms::Number
+    Kxx_fft::T
+    Kyy_fft::T
+    Kzz_fft::T
+    Kxy_fft::T
+    Kxz_fft::T
+    Kyz_fft::T
+    fft::CUDA.CUFFT.rCuFFTPlan{Float32}
+    M_pad::CuArray{Float32}
+    M_fft::CuArray{ComplexF32}
+    H_demag_fft::CuArray{ComplexF32}
+    in::CartesianIndices
+    out::CartesianIndices
+end
+
+
+function (demag::Demag)(H_eff::CuArray{Float32,3}, m::CuArray{Float32,3}, t)
 
     fill!(demag.M_pad, 0)
-    @. @inbounds demag.M_pad[demag.in] = m0 * Ms
+    @. @inbounds demag.M_pad[demag.in] = m * demag.Ms
 
     mul!(demag.M_fft, demag.fft, demag.M_pad)
 
@@ -132,18 +152,17 @@ function Demag!(H_eff::CuArray{Float32,3}, m0::CuArray{Float32,3}, demag::Demag2
     @. demag.H_demag_fft[2, ..] = Mx_fft * demag.Kxy_fft + My_fft * demag.Kyy_fft
     @. demag.H_demag_fft[3, ..] = Mz_fft * demag.Kzz_fft
 
-    ldiv!(demag.H_demag, demag.fft, demag.H_demag_fft)
+    ldiv!(demag.M_pad, demag.fft, demag.H_demag_fft)
 
-    @inbounds H_eff .+= demag.H_demag[demag.out] # truncation of demag field
+    @inbounds H_eff .+= demag.M_pad[demag.out] # truncation of demag field
 
     nothing
 end
 
-
-function Demag!(H_eff::CuArray{Float32,4}, m0::CuArray{Float32,4}, demag::Demag3D, Ms::Float32)
+function (demag::Demag)(H_eff::CuArray{Float32,4}, m::CuArray{Float32,4}, t)
 
     fill!(demag.M_pad, 0)
-    @inbounds demag.M_pad[demag.in] = m0 .* Ms
+    @inbounds @. demag.M_pad[demag.in] = m * Ms
 
     mul!(demag.M_fft, demag.fft, demag.M_pad)
 
@@ -157,11 +176,7 @@ function Demag!(H_eff::CuArray{Float32,4}, m0::CuArray{Float32,4}, demag::Demag3
 
     ldiv!(demag.H_demag, demag.fft, demag.H_demag_fft)
 
-    @inbounds H_eff .+= demag.H_demag[demag.out] # truncation of demag field
+    @inbounds H_eff .+= demag.H_demag[d.out] # truncation of demag field
 
     nothing
 end
-
-
-
-
