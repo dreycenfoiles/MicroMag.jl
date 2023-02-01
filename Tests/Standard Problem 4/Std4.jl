@@ -19,16 +19,21 @@ alpha = 0.02; # damping constant to relax system to S-state
 A = 1.3E-11 / 1e9; # nanometer/nanosecond units
 Ms = 8e5 / 1e9; # saturation magnetization
 
-B_ext = [-24.6e-3, 4.3e-3, 0.0]
+function Bext(t::Number)
+    if t == 0
+        return [0., 0., 0.]
+    else
+        return [-24.6e-3, 4.3e-3, 0.0]
+    end
+end
 
-init_m = [1f0, .1f0, 0f0]
+m0 = [1, .1, 0]
 
 mesh = Mesh(nx, ny, nz, dx, dy, dz)
-params = Params(A=A, Ms=Ms, α=alpha, B_ext=B_ext)
 
-p = InitSim(init_m, mesh, params)
+p = InitSim(mesh, m0, Aex=A, Ms=Ms, α=alpha, Bext=Bext)
 
-Relax(p)
+Relax!(p)
 
 t, cpu_sol = Run(p, 3.)
 
