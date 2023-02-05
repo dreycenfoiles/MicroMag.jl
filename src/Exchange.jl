@@ -36,10 +36,10 @@ function Exchange_kernel!(H_eff::T, m::T, ExchCoef, nx, ny, nz, dx, dy, dz) wher
     jp1 = neumann_bc(j + 1, ny)
     jm1 = neumann_bc(j - 1, ny)
 
-    ∇²m = (m[c, ip1, j] - 2 * m[c, i, j] + m[c, im1, j]) / (dx * dx) +
-          (m[c, i, jp1] - 2 * m[c, i, j] + m[c, i, jm1]) / (dy * dy)
+     ∇²m = (m[c, ip1, j] - 2 * m[c, i, j] + m[c, im1, j]) / (dx * dx) +
+                    (m[c, i, jp1] - 2 * m[c, i, j] + m[c, i, jm1]) / (dy * dy)
 
-    H_eff[c, i, j] += ∇²m * ExchCoef
+     H_eff[c, i, j] += ∇²m * ExchCoef
 
     nothing
 end

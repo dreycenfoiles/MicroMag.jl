@@ -140,7 +140,7 @@ end
 function (demag::Demag)(H_eff::CuArray{Float32,3}, m::CuArray{Float32,3}, t)
 
     fill!(demag.M_pad, 0)
-    @. @inbounds demag.M_pad[demag.in] = m * demag.Ms
+    @. demag.M_pad[demag.in] = m * demag.Ms
 
     mul!(demag.M_fft, demag.fft, demag.M_pad)
 
@@ -154,7 +154,7 @@ function (demag::Demag)(H_eff::CuArray{Float32,3}, m::CuArray{Float32,3}, t)
 
     ldiv!(demag.M_pad, demag.fft, demag.H_demag_fft)
 
-    @inbounds H_eff .+= demag.M_pad[demag.out] # truncation of demag field
+    H_eff .+= demag.M_pad[demag.out] # truncation of demag field
 
     nothing
 end
@@ -162,7 +162,7 @@ end
 function (demag::Demag)(H_eff::CuArray{Float32,4}, m::CuArray{Float32,4}, t)
 
     fill!(demag.M_pad, 0)
-    @inbounds @. demag.M_pad[demag.in] = m * Ms
+    @. demag.M_pad[demag.in] = m * Ms
 
     mul!(demag.M_fft, demag.fft, demag.M_pad)
 
@@ -176,7 +176,7 @@ function (demag::Demag)(H_eff::CuArray{Float32,4}, m::CuArray{Float32,4}, t)
 
     ldiv!(demag.H_demag, demag.fft, demag.H_demag_fft)
 
-    @inbounds H_eff .+= demag.H_demag[d.out] # truncation of demag field
+    H_eff .+= demag.H_demag[d.out] # truncation of demag field
 
     nothing
 end
