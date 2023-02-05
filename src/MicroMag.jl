@@ -79,21 +79,20 @@ end
     relax_prefactor2::Float32 = relax_prefactor1 * relax_α
 end
 
+struct Sim
+    m::CuArray{Float32}
+    mesh::Mesh
+    params::Params
+    demag::Union{Demag2D,Demag3D}
+    H_eff::CuArray{Float32}
+    M_x_H::CuArray{Float32}
+end
+
 include("Demag.jl")
 include("Exchange.jl")
 include("LLG.jl")
 include("Zeeman.jl")
 include("Init_m.jl")
-
-struct Sim
-    m::CuArray{Float32} 
-    mesh::Mesh
-    params::Params
-    demag::Union{Demag2D, Demag3D}
-    H_eff::CuArray{Float32}
-    M_x_H::CuArray{Float32}
-end
-
 
 
 # TODO: Make α spatially dependent
