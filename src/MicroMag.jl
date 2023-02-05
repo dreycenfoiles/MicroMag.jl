@@ -20,7 +20,6 @@ export Relax!
 export InitSim
 export Run
 export Mesh
-export Params
 
 const μ₀::Float32 = pi * 4e-7 / 1e9 # vacuum permeability, = 4 * pi / 10
 const γ::Float32 = 2.221e5
@@ -141,17 +140,10 @@ function InitSim(mesh::Mesh, m0; Aex=0.0, Ms=0., α=0.02, Bext=[0., 0., 0.])
 end
 
 function Relax!(sim::Sim)
-    cb = TerminateSteadyState(1e-3, 1e-3)
-    end_point = 4
-    tspan = (0, end_point)
-    t_points = range(0, end_point, length=600)
-    prob = ODEProblem(LLG_relax!, sim.m, tspan, sim)
-    # saveat=2000 if memory becomes an issue
-    sol = solve(prob, OwrenZen3(), progress=true, abstol=1e-3, reltol=1e-3, callback=cb, saveat=t_points, dt=1e-3)
-
-    # cpu_sol = cat([Array(x) for x in sol.u]..., dims=5)
-
-    sim.m .= sol.u[end]
+    prob = SteadyStateProblem(LLG_relax!, sim.m, sim)
+    sol = solve(prob, DynamicSS(OwrenZen3(), abstol=.1), dt=1e-3)
+    
+    sim.m .= sol.u
 
     nothing
 end
@@ -166,7 +158,7 @@ function Run(sim::Sim, t)
     t_points = range(0, end_point, length=300)
 
     prob = ODEProblem(LLG_run!, sim.m, tspan, sim)
-    sol = solve(prob, OwrenZen3(), progress=true, progress_steps=1000, abstol=1e-3, reltol=1e-3, saveat=t_points, dt=1e-3)
+    sol = solve(prob, OwrenZen3(), progress=true, progress_steps=1000, saveat=t_points, dt=1e-3)
 
     last_dim = length(size(sim.m))
 
