@@ -1,9 +1,11 @@
 
 function LLG_relax!(dm::T, m::T, sim::Sim, t) where {T<:CuArray{Float32}}
 
+    t = 0. # time is irrelevant for relaxation
+
     fill!(sim.H_eff, 0.)
 
-    for interaction in sim.Interactions[1:end-1]
+    for interaction in sim.Interactions
         interaction(sim.H_eff, m, t)
     end
 
