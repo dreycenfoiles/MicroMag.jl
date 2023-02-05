@@ -2,38 +2,38 @@
 
 check_normalize!(m) = m ./= sqrt.(sum(m .^ 2, dims=1))
 
-function Init_m(mesh::Mesh, init::Vector{Float32})
+function Init_m(mesh::Mesh, init::T) where T<:Vector
 
     if mesh.nz == 1
-        m0 = CUDA.zeros(Float32, 3, mesh.nx, mesh.ny)
+        m = CUDA.zeros(Float32, 3, mesh.nx, mesh.ny)
     else
-        m0 = CUDA.zeros(Float32, 3, mesh.nx, mesh.ny, mesh.nz)
+        m = CUDA.zeros(Float32, 3, mesh.nx, mesh.ny, mesh.nz)
     end
 
-    m0[1, ..] .= init[1]
-    m0[2, ..] .= init[2]
-    m0[3, ..] .= init[3]
+    m[1, ..] .= init[1]
+    m[2, ..] .= init[2]
+    m[3, ..] .= init[3]
 
-    check_normalize!(m0)
+    check_normalize!(m)
 
-    return m0
+    return m
 end
 
 # FIXME: This should be changed for the 2D case
-function Init_m(mesh::Mesh, init::Function)
+function Init_m(mesh::Mesh, init::T) where T<:Function
 
-    m0 = zeros(Float32, 3, mesh.nx, mesh.ny, mesh.nz)
+    m = zeros(Float32, 3, mesh.nx, mesh.ny, mesh.nz)
 
     nx, ny, nz = mesh.nx, mesh.ny, mesh.nz
     dx, dy, dz = mesh.dx, mesh.dy, mesh.dz
 
     for i in CartesianIndices((nx, ny, nz))
-        m0[:, i] = init(i[1] * dx, i[2] * dy, i[3] * dz)
+        m[:, i] = init(i[1] * dx, i[2] * dy, i[3] * dz)
     end
 
-    m0 = CuArray{Float32}(m0)
+    m = CuArray{Float32}(m)
 
-    check_normalize!(m0)
+    check_normalize!(m)
 
-    return m0
+    return m
 end
