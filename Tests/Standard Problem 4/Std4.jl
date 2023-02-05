@@ -20,7 +20,7 @@ A = 1.3E-11 / 1e9; # nanometer/nanosecond units
 Ms = 8e5 / 1e9; # saturation magnetization
 
 function Bext(t::Number)
-    if t == 0
+    if t == 0.
         return [0., 0., 0.]
     else
         return [-24.6e-3, 4.3e-3, 0.0]
@@ -49,7 +49,7 @@ plot(t, mx_avg, label="mx")
 plot!(t, my_avg, label="my")
 plot!(t, mz_avg, label="mz")
 
-mumax3 = CSV.File("Tests/table.txt") |> DataFrame
+mumax3 = CSV.File("Tests/Standard Problem 4/table.txt") |> DataFrame
 
 mumax3_t = mumax3[!, "# t (s)"] * 1e9
 

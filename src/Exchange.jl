@@ -24,7 +24,7 @@ end
 # TODO: Periodic boundary conditions
 
 
-function Exchange_kernel!(H_eff::T, m::T, nx, ny, nz, dx, dy, dz) where {T<:CuDeviceArray{Float32,3}}
+function Exchange_kernel!(H_eff::T, m::T, ExchCoef, nx, ny, nz, dx, dy, dz) where {T<:CuDeviceArray{Float32,3}}
 
     c = blockIdx().x
     i = blockIdx().y
@@ -39,13 +39,13 @@ function Exchange_kernel!(H_eff::T, m::T, nx, ny, nz, dx, dy, dz) where {T<:CuDe
     ∇²m = (m[c, ip1, j] - 2 * m[c, i, j] + m[c, im1, j]) / (dx * dx) +
           (m[c, i, jp1] - 2 * m[c, i, j] + m[c, i, jm1]) / (dy * dy)
 
-    H_eff[c, i, j] += ∇²m
+    H_eff[c, i, j] += ∇²m * ExchCoef
 
     nothing
 end
 
 
-function Exchange_kernel!(H_eff::T, m::T, nx, ny, nz, dx, dy, dz) where {T<:CuDeviceArray{Float32,4}}
+function Exchange_kernel!(H_eff::T, m::T, ExchCoef, nx, ny, nz, dx, dy, dz) where {T<:CuDeviceArray{Float32,4}}
 
     c = blockIdx().x
     i = blockIdx().y
@@ -65,7 +65,7 @@ function Exchange_kernel!(H_eff::T, m::T, nx, ny, nz, dx, dy, dz) where {T<:CuDe
           (m[c, i, jp1, k] - 2 * m[c, i, j, k] + m[c, i, jm1, k]) / (dy * dy) +
           (m[c, i, j, kp1] - 2 * m[c, i, j, k] + m[c, i, j, km1]) / (dz * dz)
 
-    H_eff[c, i, j, k] += ∇²m
+    H_eff[c, i, j, k] += ∇²m * ExchCoef
 
     nothing
 end
@@ -81,9 +81,10 @@ function (exch::Exchange)(H_eff::T, m::T, t) where {T<:CuArray{Float32}}
     dz = exch.dz
 
     # FIXME: Will error if nx >= 1024
-    @cuda blocks=(3,nx) threads=ny Exchange_kernel!(H_eff, m, nx, ny, nz, dx, dy, dz)
+    @cuda blocks=(3,nx) threads=(ny,nz) Exchange_kernel!(H_eff, m, exch.ExchangeCoefficient, nx, ny, nz, dx, dy, dz)
 
-    H_eff .*= exch.ExchangeCoefficient
+    # BAD! Don't multiply the whole thing by the exchange coefficient
+    # H_eff .*= exch.ExchangeCoefficient
 
     nothing
 end

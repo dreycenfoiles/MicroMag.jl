@@ -3,7 +3,7 @@ function LLG_relax!(dm::T, m::T, sim::Sim, t) where {T<:CuArray{Float32}}
 
     fill!(sim.H_eff, 0.)
 
-    for interaction in sim.Interactions
+    for interaction in sim.Interactions[1:end-1]
         interaction(sim.H_eff, m, t)
     end
 

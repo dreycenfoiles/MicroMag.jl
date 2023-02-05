@@ -57,7 +57,7 @@ include("Init_m.jl")
 
 VectorOrFunction = Union{Vector{Float64}, Function}
 
-function InitSim(mesh::Mesh, m0; Aex=0.0, Ms=1.0, α=0.02, Bext=[0., 0., 0.])
+function InitSim(mesh::Mesh, m0; Aex=0.0, Ms=0., α=0.02, Bext=[0., 0., 0.])
 
     exch = 2 * Aex / μ₀ / Ms
     prefactor1 = -γ / (1 + α * α)
@@ -141,9 +141,8 @@ function InitSim(mesh::Mesh, m0; Aex=0.0, Ms=1.0, α=0.02, Bext=[0., 0., 0.])
 end
 
 function Relax!(sim::Sim)
-    # prob = SteadyStateProblem(LLG_loop!, m, p)
-    cb = TerminateSteadyState(1e-5, 1e-5)
-    end_point = 1
+    cb = TerminateSteadyState(1e-3, 1e-3)
+    end_point = 4
     tspan = (0, end_point)
     t_points = range(0, end_point, length=600)
     prob = ODEProblem(LLG_relax!, sim.m, tspan, sim)
