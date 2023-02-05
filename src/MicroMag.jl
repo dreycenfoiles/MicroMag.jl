@@ -26,7 +26,7 @@ const γ::Float32 = 2.221e5
 
 abstract type AbstractField end
 
-struct Mesh{T<:Int,U<:Float64}
+struct Mesh{T<:Int,U<:Number}
     nx::T
     ny::T
     nz::T
@@ -54,9 +54,10 @@ include("Zeeman.jl")
 include("Init_m.jl")
 
 
-VectorOrFunction = Union{Vector{Float64}, Function}
+VectorOrFunction = Union{Vector{Number},Function}
+ScalarOrFunction = Union{Number,Function}
 
-function InitSim(mesh::Mesh, m0; Aex=0.0, Ms=0., α=0.02, Bext=[0., 0., 0.])
+function InitSim(mesh::Mesh, m0; Aex=0.0, Ms=0., α=0., Bext=[0., 0., 0.])
 
     exch = 2 * Aex / μ₀ / Ms
     prefactor1 = -γ / (1 + α * α)
